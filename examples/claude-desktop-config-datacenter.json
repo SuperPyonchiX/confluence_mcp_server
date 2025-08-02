@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "confluence-datacenter": {
+      "command": "node",
+      "args": ["build/index.js"],
+      "env": {
+        "CONFLUENCE_DOMAIN": "your-confluence-server.com",
+        "CONFLUENCE_AUTH_TYPE": "basic",
+        "CONFLUENCE_USERNAME": "your-username",
+        "CONFLUENCE_PASSWORD": "your-password",
+        "CONFLUENCE_BASE_URL": "https://your-confluence-server.com/rest/api/2"
+      }
+    }
+  }
+}
