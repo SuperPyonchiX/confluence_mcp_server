@@ -32,7 +32,13 @@ Confluence Cloud REST API v2 および Confluence DataCenter/Server REST API へ
 - **バージョン**: コンテンツのバージョン履歴へのアクセスと以前のバージョンの復元
 - **管理者キー**: 管理アクセスと昇格権限の処理
 
-## 提供ツール（全45個）
+### Markdown変換機能 🆕
+- **ページ→Markdown**: ConfluenceページをローカルのMarkdownファイルとして保存
+- **Markdown→ページ**: MarkdownファイルからConfluenceページを作成
+- **ページ更新**: MarkdownファイルでConfluenceページを更新
+- **スペース一括エクスポート**: スペース全体をMarkdownファイル群としてエクスポート
+
+## 提供ツール（全49個）
 
 ### ページ操作 (5個)
 - `confluence_get_pages` - ページ一覧取得
@@ -77,6 +83,12 @@ Confluence Cloud REST API v2 および Confluence DataCenter/Server REST API へ
 - `confluence_get_admin_key` - 管理者キー取得
 - `confluence_enable_admin_key` - 管理者キー有効化
 - `confluence_disable_admin_key` - 管理者キー無効化
+
+### Markdown変換操作 (4個) 🆕
+- `confluence_page_to_markdown` - ページをMarkdownファイルに変換・保存
+- `confluence_markdown_to_page` - MarkdownファイルからConfluenceページ作成
+- `confluence_update_page_from_markdown` - MarkdownファイルでConfluenceページ更新
+- `confluence_export_space_to_markdown` - スペース全体をMarkdownとしてエクスポート
 
 ## インストール
 
@@ -271,6 +283,32 @@ TEAMスペースに「今週のアップデート」というタイトルでブ�
 
 ```
 今月アップロードされたPDFファイルをすべて表示してください
+```
+
+### Markdown変換機能の使用 🆕
+
+#### ConfluenceページをMarkdownに変換
+
+```
+ページID 12345 をMarkdownファイルに変換して、./docs/api-spec.md として保存してください
+```
+
+#### MarkdownファイルからConfluenceページを作成
+
+```
+./docs/user-guide.md ファイルからDEVスペース（スペースID: 678）にConfluenceページを作成してください
+```
+
+#### 既存ページをMarkdownで更新
+
+```
+./README.md ファイルの内容でページID 98765 を更新してください。バージョンメッセージは「ドキュメント更新」としてください
+```
+
+#### スペース全体をMarkdownにエクスポート
+
+```
+DOCスペース（スペースID: 456）のすべてのページを ./export/DOC_space/ ディレクトリにMarkdownファイルとしてエクスポートしてください
 ```
 
 ## トラブルシューティング

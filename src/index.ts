@@ -11,11 +11,13 @@ import {
 
 import { ConfluenceApiClient } from './confluence-client.js';
 import { ConfluenceConfig } from './types.js';
+import { MarkdownConverter, MarkdownConversionOptions } from './markdown-converter.js';
 
 // Confluence tools implementation
 class ConfluenceMCPServer {
   private server: Server;
   private confluenceClient: ConfluenceApiClient | null = null;
+  private markdownConverter: MarkdownConverter;
 
   constructor() {
     this.server = new Server({
@@ -23,6 +25,7 @@ class ConfluenceMCPServer {
       version: '1.0.0',
     });
 
+    this.markdownConverter = new MarkdownConverter();
     this.setupToolHandlers();
     this.setupErrorHandling();
   }
@@ -950,6 +953,106 @@ class ConfluenceMCPServer {
           type: 'object',
           properties: {}
         }
+      },
+
+      // Markdown conversion tools
+      {
+        name: 'confluence_page_to_markdown',
+        description: 'Convert a Confluence page to Markdown and save to file',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pageId: {
+              type: 'number',
+              description: 'The ID of the page to convert'
+            },
+            filePath: {
+              type: 'string',
+              description: 'Output file path (optional, .md extension will be added if missing)'
+            },
+            outputDir: {
+              type: 'string',
+              description: 'Output directory (default: ./exports)'
+            },
+            includeMetadata: {
+              type: 'boolean',
+              description: 'Include page metadata as front matter (default: true)'
+            }
+          },
+          required: ['pageId']
+        }
+      },
+      {
+        name: 'confluence_markdown_to_page',
+        description: 'Create a Confluence page from a Markdown file',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            filePath: {
+              type: 'string',
+              description: 'Path to the Markdown file to upload'
+            },
+            spaceId: {
+              type: 'number',
+              description: 'The ID of the space to create the page in'
+            },
+            parentId: {
+              type: 'number',
+              description: 'The ID of the parent page (optional)'
+            },
+            status: {
+              type: 'string',
+              enum: ['current', 'draft'],
+              default: 'current',
+              description: 'The status of the page'
+            }
+          },
+          required: ['filePath', 'spaceId']
+        }
+      },
+      {
+        name: 'confluence_update_page_from_markdown',
+        description: 'Update an existing Confluence page with content from a Markdown file',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pageId: {
+              type: 'number',
+              description: 'The ID of the page to update'
+            },
+            filePath: {
+              type: 'string',
+              description: 'Path to the Markdown file'
+            },
+            versionMessage: {
+              type: 'string',
+              description: 'Version update message (optional)'
+            }
+          },
+          required: ['pageId', 'filePath']
+        }
+      },
+      {
+        name: 'confluence_export_space_to_markdown',
+        description: 'Export all pages in a space to Markdown files',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            spaceId: {
+              type: 'number',
+              description: 'The ID of the space to export'
+            },
+            outputDir: {
+              type: 'string',
+              description: 'Output directory for the exported files'
+            },
+            includeMetadata: {
+              type: 'boolean',
+              description: 'Include page metadata as front matter (default: true)'
+            }
+          },
+          required: ['spaceId', 'outputDir']
+        }
       }
     ];
   }
@@ -1079,6 +1182,19 @@ class ConfluenceMCPServer {
           await client.disableAdminKey();
           return { success: true, message: 'Admin key disabled successfully' };
 
+        // Markdown conversion operations
+        case 'confluence_page_to_markdown':
+          return await this.handlePageToMarkdown(client, args);
+
+        case 'confluence_markdown_to_page':
+          return await this.handleMarkdownToPage(client, args);
+
+        case 'confluence_update_page_from_markdown':
+          return await this.handleUpdatePageFromMarkdown(client, args);
+
+        case 'confluence_export_space_to_markdown':
+          return await this.handleExportSpaceToMarkdown(client, args);
+
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -1097,6 +1213,135 @@ class ConfluenceMCPServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('Confluence MCP server running on stdio');
+  }
+
+  // Markdown conversion handler methods
+  private async handlePageToMarkdown(client: ConfluenceApiClient, args: any): Promise<any> {
+    try {
+      const pageData = await client.getPageById(args.pageId, { 
+        bodyFormat: 'storage',
+        includeLabels: true,
+        includeProperties: true 
+      });
+
+      const options: MarkdownConversionOptions = {
+        filePath: args.filePath,
+        outputDir: args.outputDir || './exports',
+        includeMetadata: args.includeMetadata !== false
+      };
+
+      const result = await this.markdownConverter.savePageAsMarkdown(pageData, options);
+      
+      return {
+        success: true,
+        message: 'Page converted to Markdown successfully',
+        filePath: result.filePath,
+        title: pageData.title,
+        metadata: result.metadata
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to convert page to Markdown: ${error.message}`);
+    }
+  }
+
+  private async handleMarkdownToPage(client: ConfluenceApiClient, args: any): Promise<any> {
+    try {
+      const { title, content } = await this.markdownConverter.loadMarkdownForConfluence(args.filePath);
+
+      const pageData = {
+        spaceId: args.spaceId,
+        title,
+        body: {
+          storage: {
+            value: content,
+            representation: 'storage' as const
+          }
+        },
+        parentId: args.parentId,
+        status: args.status || 'current'
+      };
+
+      const createdPage = await client.createPage(pageData);
+      
+      return {
+        success: true,
+        message: 'Page created from Markdown successfully',
+        pageId: createdPage.id,
+        title: createdPage.title
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to create page from Markdown: ${error.message}`);
+    }
+  }
+
+  private async handleUpdatePageFromMarkdown(client: ConfluenceApiClient, args: any): Promise<any> {
+    try {
+      // 既存ページの情報を取得
+      const existingPage = await client.getPageById(args.pageId);
+      const { title, content } = await this.markdownConverter.loadMarkdownForConfluence(args.filePath);
+
+      const updateData = {
+        id: args.pageId,
+        title,
+        body: {
+          storage: {
+            value: content,
+            representation: 'storage' as const
+          }
+        },
+        version: {
+          number: existingPage.version.number + 1,
+          message: args.versionMessage || 'Updated from Markdown file'
+        }
+      };
+
+      const updatedPage = await client.updatePage(updateData);
+      
+      return {
+        success: true,
+        message: 'Page updated from Markdown successfully',
+        pageId: updatedPage.id,
+        title: updatedPage.title,
+        version: updatedPage.version.number
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to update page from Markdown: ${error.message}`);
+    }
+  }
+
+  private async handleExportSpaceToMarkdown(client: ConfluenceApiClient, args: any): Promise<any> {
+    try {
+      const pages = await client.getPages({ 
+        spaceId: [args.spaceId],
+        bodyFormat: 'storage',
+        limit: 250
+      });
+
+      const exportResults = [];
+      
+      for (const page of pages.results || []) {
+        const options: MarkdownConversionOptions = {
+          outputDir: args.outputDir,
+          includeMetadata: args.includeMetadata !== false
+        };
+
+        const result = await this.markdownConverter.savePageAsMarkdown(page, options);
+        exportResults.push({
+          pageId: page.id,
+          title: page.title,
+          filePath: result.filePath
+        });
+      }
+      
+      return {
+        success: true,
+        message: `Exported ${exportResults.length} pages to Markdown`,
+        exportedPages: exportResults,
+        outputDirectory: args.outputDir
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to export space to Markdown: ${error.message}`);
+    }
   }
 }
 
