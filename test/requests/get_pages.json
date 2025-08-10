@@ -1,0 +1,14 @@
+{
+    "jsonrpc": "2.0",
+    "id": 13,
+    "method": "tools/call",
+    "params": {
+        "name": "confluence_get_pages",
+        "arguments": {
+            "limit": 3,
+            "spaceId": [
+                131083
+            ]
+        }
+    }
+}

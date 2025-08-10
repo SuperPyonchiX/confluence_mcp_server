@@ -1,0 +1,12 @@
+{
+    "jsonrpc": "2.0",
+    "id": 12,
+    "method": "tools/call",
+    "params": {
+        "name": "confluence_get_page_by_id",
+        "arguments": {
+            "id": 163938,
+            "bodyFormat": "storage"
+        }
+    }
+}

@@ -1,0 +1,18 @@
+{
+    "jsonrpc": "2.0",
+    "id": 15,
+    "method": "tools/call",
+    "params": {
+        "name": "confluence_create_page",
+        "arguments": {
+            "spaceId": 131083,
+            "title": "Test Page from MCP",
+            "body": {
+                "storage": {
+                    "value": "<p>This is a test page created from MCP server</p>",
+                    "representation": "storage"
+                }
+            }
+        }
+    }
+}

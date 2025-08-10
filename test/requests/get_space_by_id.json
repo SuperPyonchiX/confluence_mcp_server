@@ -1,0 +1,11 @@
+{
+    "jsonrpc": "2.0",
+    "id": 14,
+    "method": "tools/call",
+    "params": {
+        "name": "confluence_get_space_by_id",
+        "arguments": {
+            "id": 131083
+        }
+    }
+}
