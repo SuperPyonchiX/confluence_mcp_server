@@ -232,23 +232,258 @@ export class MarkdownConverter {
   }
 
   private simpleMarkdownToHtml(markdown: string): string {
-    // 簡易的なMarkdown→HTML変換
-    // 実際のプロダクションでは、より堅牢なライブラリを使用することを推奨
-    return markdown
-      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-      .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-      .replace(/\*(.*)\*/gim, '<em>$1</em>')
-      .replace(/`([^`]+)`/gim, '<code>$1</code>')
-      .replace(/```([^```]+)```/gims, '<pre><code>$1</code></pre>')
-      .replace(/\n/gim, '<br>');
+    console.log('Converting markdown to HTML - input length:', markdown.length);
+    
+    // 改行文字を統一
+    let html = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // 行ごとに処理
+    const lines = html.split('\n');
+    const processedLines: string[] = [];
+    let inTable = false;
+    let inCodeBlock = false;
+    let inList = false;
+    let listDepth = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line) continue; // undefined チェック
+      
+      const trimmed = line.trim();
+
+      // 空行の処理
+      if (trimmed === '') {
+        // テーブル終了
+        if (inTable) {
+          processedLines.push('</tbody>');
+          processedLines.push('</table>');
+          inTable = false;
+        }
+        // リスト終了
+        if (inList) {
+          for (let d = listDepth; d > 0; d--) {
+            processedLines.push('</ul>');
+          }
+          inList = false;
+          listDepth = 0;
+        }
+        continue;
+      }
+
+      // コードブロックの処理
+      if (trimmed.startsWith('```')) {
+        // テーブルやリストが開いている場合は先に閉じる
+        if (inTable) {
+          processedLines.push('</tbody>');
+          processedLines.push('</table>');
+          inTable = false;
+        }
+        if (inList) {
+          for (let d = listDepth; d > 0; d--) {
+            processedLines.push('</ul>');
+          }
+          inList = false;
+          listDepth = 0;
+        }
+
+        if (!inCodeBlock) {
+          const language = trimmed.substring(3).trim();
+          processedLines.push(`<pre><code${language ? ` class="language-${language}"` : ''}>`);
+          inCodeBlock = true;
+        } else {
+          processedLines.push('</code></pre>');
+          inCodeBlock = false;
+        }
+        continue;
+      }
+
+      if (inCodeBlock) {
+        processedLines.push(this.escapeHtml(line || ''));
+        continue;
+      }
+
+      // 見出しの処理
+      if (trimmed.startsWith('#')) {
+        // テーブルやリストが開いている場合は先に閉じる
+        if (inTable) {
+          processedLines.push('</tbody>');
+          processedLines.push('</table>');
+          inTable = false;
+        }
+        if (inList) {
+          for (let d = listDepth; d > 0; d--) {
+            processedLines.push('</ul>');
+          }
+          inList = false;
+          listDepth = 0;
+        }
+
+        if (trimmed.startsWith('####')) {
+          const title = this.processInlineMarkdown(trimmed.substring(4).trim());
+          processedLines.push(`<h4>${title}</h4>`);
+        } else if (trimmed.startsWith('###')) {
+          const title = this.processInlineMarkdown(trimmed.substring(3).trim());
+          processedLines.push(`<h3>${title}</h3>`);
+        } else if (trimmed.startsWith('##')) {
+          const title = this.processInlineMarkdown(trimmed.substring(2).trim());
+          processedLines.push(`<h2>${title}</h2>`);
+        } else if (trimmed.startsWith('#')) {
+          const title = this.processInlineMarkdown(trimmed.substring(1).trim());
+          processedLines.push(`<h1>${title}</h1>`);
+        }
+        continue;
+      }
+
+      // リストの処理（テーブル内ではない場合のみ）
+      if ((trimmed.startsWith('- ') || trimmed.startsWith('* ')) && !inTable) {
+        const content = this.processInlineMarkdown(trimmed.substring(2));
+        if (!inList) {
+          processedLines.push('<ul>');
+          inList = true;
+          listDepth = 1;
+        }
+        processedLines.push(`<li>${content}</li>`);
+        continue;
+      }
+
+      // テーブルの処理
+      if (trimmed.includes('|') && !inTable && !inList && !inCodeBlock) {
+        const nextLine = i + 1 < lines.length ? lines[i + 1] : undefined;
+        if (nextLine && nextLine.includes('|---')) {
+          // テーブルの開始
+          inTable = true;
+          const headers = trimmed.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
+          processedLines.push('<table>');
+          processedLines.push('<thead>');
+          processedLines.push('<tr>');
+          headers.forEach(header => {
+            processedLines.push(`<th>${this.processInlineMarkdown(header)}</th>`);
+          });
+          processedLines.push('</tr>');
+          processedLines.push('</thead>');
+          processedLines.push('<tbody>');
+          i++; // セパレーター行をスキップ
+          continue;
+        }
+      } else if (inTable && trimmed.includes('|')) {
+        const cells = trimmed.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
+        processedLines.push('<tr>');
+        cells.forEach(cell => {
+          processedLines.push(`<td>${this.processInlineMarkdown(cell)}</td>`);
+        });
+        processedLines.push('</tr>');
+        continue;
+      }
+
+      // 通常の段落（テーブル内、リスト内、コードブロック内ではない場合）
+      if (trimmed && !inTable && !inList) {
+        const content = this.processInlineMarkdown(trimmed);
+        processedLines.push(`<p>${content}</p>`);
+      }
+    }
+
+    // 未終了の要素を閉じる
+    if (inList) {
+      for (let d = listDepth; d > 0; d--) {
+        processedLines.push('</ul>');
+      }
+    }
+
+    if (inTable) {
+      processedLines.push('</tbody>');
+      processedLines.push('</table>');
+    }
+
+    const result = processedLines.join('\n');
+    console.log('HTML conversion complete - output length:', result.length);
+    return result;
+  }
+
+  private processInlineMarkdown(text: string): string {
+    if (!text) return '';
+    
+    // 先に絵文字を HTML実体参照に変換
+    text = text.replace(/📋/g, '&#128203;');
+    text = text.replace(/📄/g, '&#128196;');
+    text = text.replace(/🔍/g, '&#128269;');
+    text = text.replace(/🏷️/g, '&#127991;');
+    text = text.replace(/👥/g, '&#128101;');
+    text = text.replace(/🏢/g, '&#127970;');
+    text = text.replace(/📝/g, '&#128221;');
+    text = text.replace(/⭐/g, '&#11088;');
+    text = text.replace(/✅/g, '&#9989;');
+    text = text.replace(/❌/g, '&#10060;');
+    text = text.replace(/�/g, '&#128640;');
+    text = text.replace(/�/g, '&#128230;');
+    text = text.replace(/💡/g, '&#128161;');
+    text = text.replace(/�/g, '&#128295;');
+    text = text.replace(/⚠️/g, '&#9888;');
+    text = text.replace(/�/g, '&#128202;');
+    text = text.replace(/🤝/g, '&#129309;');
+    text = text.replace(/📈/g, '&#128200;');
+    text = text.replace(/🎯/g, '&#127919;');
+    
+    // インラインコードの処理（HTMLタグ生成はしない）
+    text = text.replace(/`([^`]+)`/g, '$1');
+    
+    // 太字の処理（** を除去）
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, '$1');
+    
+    // 斜体の処理（* を除去）
+    text = text.replace(/\*([^*\n]+)\*/g, '$1');
+    
+    // リンクの処理（[text](url) を text に）
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
+    
+    // HTML特殊文字のエスケープは絵文字処理の後に実行
+    text = text.replace(/&(?!#\d+;)/g, '&amp;'); // 実体参照以外の&をエスケープ
+    text = text.replace(/</g, '&lt;');
+    text = text.replace(/>/g, '&gt;');
+    text = text.replace(/"/g, '&quot;');
+    text = text.replace(/'/g, '&#39;');
+    
+    return text;
+    text = text.replace(/>/g, '&gt;');
+    text = text.replace(/"/g, '&quot;');
+    text = text.replace(/'/g, '&#39;');
+    
+    return text;
+  }
+
+  private escapeHtml(text: string): string {
+    if (!text) return '';
+    
+    // 基本的なHTMLエスケープ（実体参照は除外）
+    return text
+      .replace(/&(?!#\d+;)/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   private adaptToConfluenceStorage(html: string): string {
+    if (!html) return '';
+    
     // ConfluenceのStorage形式に適合するよう調整
-    // 必要に応じて、特定のHTML構造をConfluenceマクロに変換
-    return html;
+    
+    // 不要な文字を除去
+    html = html.replace(/\r/g, '');
+    
+    // 空の段落を除去
+    html = html.replace(/<p>\s*<\/p>/g, '');
+    
+    // 空の表セルをスペースで埋める
+    html = html.replace(/<td>\s*<\/td>/g, '<td> </td>');
+    
+    // 連続する段落の間に適切な改行を追加
+    html = html.replace(/<\/p>\n<p>/g, '</p>\n<p>');
+    
+    // HTMLの整形
+    html = html.replace(/>\s+</g, '><');
+    
+    console.log('Final HTML output (first 500 chars):', html.substring(0, 500));
+    return html.trim();
   }
 
   private sanitizeFilename(filename: string): string {

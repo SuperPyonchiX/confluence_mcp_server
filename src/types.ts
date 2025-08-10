@@ -170,7 +170,7 @@ export interface ContentProperty {
 
 // Request types
 export interface PageCreateRequest {
-  spaceId: number;
+  spaceId: number | string;  // DataCenter版ではkeyも受け入れる
   status?: 'current' | 'draft';
   title: string;
   parentId?: number;

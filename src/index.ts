@@ -210,8 +210,11 @@ class ConfluenceMCPServer {
           type: 'object',
           properties: {
             spaceId: {
-              type: 'number',
-              description: 'ページを作成するスペースのID'
+              oneOf: [
+                { type: 'number' },
+                { type: 'string' }
+              ],
+              description: 'ページを作成するスペースのID（数値）またはキー（文字列）'
             },
             title: {
               type: 'string',
@@ -226,9 +229,12 @@ class ConfluenceMCPServer {
                     value: { type: 'string' },
                     representation: { type: 'string', enum: ['storage'] }
                   },
-                  required: ['value', 'representation']
+                  required: ['value', 'representation'],
+                  additionalProperties: false
                 }
               },
+              required: ['storage'],
+              additionalProperties: false,
               description: 'ページの本文コンテンツ'
             },
             parentId: {
@@ -566,8 +572,11 @@ class ConfluenceMCPServer {
               description: 'アップロードするMarkdownファイルのパス'
             },
             spaceId: {
-              type: 'number',
-              description: 'ページを作成するスペースのID'
+              oneOf: [
+                { type: 'number' },
+                { type: 'string' }
+              ],
+              description: 'ページを作成するスペースのID（数値）またはキー（文字列）'
             },
             parentId: {
               type: 'number',
@@ -652,8 +661,15 @@ class ConfluenceMCPServer {
           return { content: [{ type: "text", text: JSON.stringify(pageResult, null, 2) }] };
 
         case 'confluence_create_page':
-          const createdPage = await client.createPage(args as any, { private: args.private as boolean });
-          return { content: [{ type: "text", text: JSON.stringify(createdPage, null, 2) }] };
+          try {
+            console.error('[DEBUG] confluence_create_page called with args:', JSON.stringify(args, null, 2));
+            const createdPage = await client.createPage(args as any, { private: args.private as boolean });
+            console.error('[DEBUG] confluence_create_page success:', JSON.stringify(createdPage, null, 2));
+            return { content: [{ type: "text", text: JSON.stringify(createdPage, null, 2) }] };
+          } catch (error) {
+            console.error('[DEBUG] confluence_create_page error:', error);
+            throw error;
+          }
 
         case 'confluence_update_page':
           // 現在のページ情報を取得してバージョン番号を自動インクリメント
@@ -723,8 +739,15 @@ class ConfluenceMCPServer {
           return { content: [{ type: "text", text: JSON.stringify(pageToMdResult, null, 2) }] };
 
         case 'confluence_markdown_to_page':
-          const mdToPageResult = await this.handleMarkdownToPage(client, args);
-          return { content: [{ type: "text", text: JSON.stringify(mdToPageResult, null, 2) }] };
+          try {
+            console.error('[DEBUG] confluence_markdown_to_page called with args:', JSON.stringify(args, null, 2));
+            const mdToPageResult = await this.handleMarkdownToPage(client, args);
+            console.error('[DEBUG] confluence_markdown_to_page success:', JSON.stringify(mdToPageResult, null, 2));
+            return { content: [{ type: "text", text: JSON.stringify(mdToPageResult, null, 2) }] };
+          } catch (error) {
+            console.error('[DEBUG] confluence_markdown_to_page error:', error);
+            throw error;
+          }
 
         case 'confluence_update_page_from_markdown':
           const updateFromMdResult = await this.handleUpdatePageFromMarkdown(client, args);
@@ -787,7 +810,11 @@ class ConfluenceMCPServer {
 
   private async handleMarkdownToPage(client: ConfluenceApiClient, args: any): Promise<any> {
     try {
+      console.error('[DEBUG] handleMarkdownToPage - Starting with args:', JSON.stringify(args, null, 2));
+      
       const { title, content } = await this.markdownConverter.loadMarkdownForConfluence(args.filePath);
+      console.error('[DEBUG] handleMarkdownToPage - Loaded title:', title);
+      console.error('[DEBUG] handleMarkdownToPage - Loaded content length:', content.length);
 
       const pageData = {
         spaceId: args.spaceId,
@@ -802,7 +829,11 @@ class ConfluenceMCPServer {
         status: args.status || 'current'
       };
 
+      console.error('[DEBUG] handleMarkdownToPage - pageData:', JSON.stringify(pageData, null, 2));
+
       const createdPage = await client.createPage(pageData);
+      
+      console.error('[DEBUG] handleMarkdownToPage - Created page:', JSON.stringify(createdPage, null, 2));
       
       return {
         success: true,
@@ -811,6 +842,7 @@ class ConfluenceMCPServer {
         title: createdPage.title
       };
     } catch (error: any) {
+      console.error('[DEBUG] handleMarkdownToPage - Error:', error);
       throw new Error(`Failed to create page from Markdown: ${error.message}`);
     }
   }

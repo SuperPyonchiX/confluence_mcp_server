@@ -2,12 +2,9 @@
 
 Confluence DataCenter/Server環境向けのModel Context Protocol（MCP）サーバーです。AIエージェントがConfluenceのスペース、ページ、ユーザー、検索機能と効率的にやり取りできるよう設計されています。
 
-## 📋 概要### テストの実行
-```bash
-# 全17APIのテスト実行
-cd test
-./confluence_datacenter_17_apis.bat
-```MCPサーバーは、Confluence DataCenter/Serverの**17の主要API**を提供し、以下の機能を実現します：
+## 📋 概要
+
+MCPサーバーは、Confluence DataCenter/Serverの**17の主要API**を提供し、以下の機能を実現します：
 
 - 📄 **ページ管理**: 作成・読取・更新・削除の完全なCRUD操作
 - 🔍 **高度な検索**: CQL（Confluence Query Language）による強力な検索機能
@@ -183,9 +180,9 @@ VS Code設定ファイルに以下を追加：
 
 ### テストの実行
 ```bash
-# 全16APIの動作テスト
+# 全17APIの動作テスト
 cd test
-./confluence_datacenter_16_apis.bat
+./confluence_datacenter_17_apis.bat
 ```
 
 ### 開発モードでの実行
