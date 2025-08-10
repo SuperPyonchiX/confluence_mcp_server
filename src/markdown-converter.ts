@@ -288,17 +288,25 @@ export class MarkdownConverter {
 
         if (!inCodeBlock) {
           const language = trimmed.substring(3).trim();
-          processedLines.push(`<pre><code${language ? ` class="language-${language}"` : ''}>`);
+          // Confluenceのstructured-macroコードブロック形式を使用
+          const macroId = this.generateMacroId();
+          processedLines.push(`<ac:structured-macro ac:name="code" ac:schema-version="1" ac:macro-id="${macroId}">`);
+          if (language) {
+            processedLines.push(`<ac:parameter ac:name="language">${language}</ac:parameter>`);
+          }
+          processedLines.push('<ac:plain-text-body><![CDATA[');
           inCodeBlock = true;
         } else {
-          processedLines.push('</code></pre>');
+          processedLines.push(']]></ac:plain-text-body>');
+          processedLines.push('</ac:structured-macro>');
           inCodeBlock = false;
         }
         continue;
       }
 
       if (inCodeBlock) {
-        processedLines.push(this.escapeHtml(line || ''));
+        // CDATA内ではエスケープ不要、改行文字を\\nに変換
+        processedLines.push(line ? line.replace(/\n/g, '\\n') : '');
         continue;
       }
 
@@ -450,18 +458,6 @@ export class MarkdownConverter {
     return text;
   }
 
-  private escapeHtml(text: string): string {
-    if (!text) return '';
-    
-    // 基本的なHTMLエスケープ（実体参照は除外）
-    return text
-      .replace(/&(?!#\d+;)/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
   private adaptToConfluenceStorage(html: string): string {
     if (!html) return '';
     
@@ -484,6 +480,15 @@ export class MarkdownConverter {
     
     console.log('Final HTML output (first 500 chars):', html.substring(0, 500));
     return html.trim();
+  }
+
+  private generateMacroId(): string {
+    // UUIDライクなIDを生成（Confluenceマクロ用）
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
   }
 
   private sanitizeFilename(filename: string): string {
