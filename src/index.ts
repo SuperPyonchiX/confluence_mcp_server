@@ -114,90 +114,90 @@ class ConfluenceMCPServer {
       // Page tools
       {
         name: 'confluence_get_pages',
-        description: 'Get all pages with optional filtering by space, status, title, etc.',
+        description: 'ページ一覧を取得します。スペース、ステータス、タイトルなどでフィルタリング可能',
         inputSchema: {
           type: 'object',
           properties: {
             id: {
               type: 'array',
               items: { type: 'number' },
-              description: 'Filter by page IDs'
+              description: 'ページIDでフィルタリング'
             },
             spaceId: {
               type: 'array',
               items: { type: 'number' },
-              description: 'Filter by space IDs'
+              description: 'スペースIDでフィルタリング'
             },
             status: {
               type: 'array',
               items: { type: 'string', enum: ['current', 'archived', 'deleted', 'trashed', 'draft'] },
-              description: 'Filter by page status'
+              description: 'ページステータスでフィルタリング'
             },
             title: {
               type: 'string',
-              description: 'Filter by page title'
+              description: 'ページタイトルでフィルタリング'
             },
             bodyFormat: {
               type: 'string',
               enum: ['storage', 'atlas_doc_format', 'view'],
-              description: 'Content format to return in body field'
+              description: 'コンテンツ形式（bodyフィールドの返却形式）'
             },
             sort: {
               type: 'string',
-              description: 'Sort order (e.g., created-date, -created-date, title, -title)'
+              description: 'ソート順（例: created-date, -created-date, title, -title）'
             },
             limit: {
               type: 'number',
               minimum: 1,
               maximum: 250,
               default: 25,
-              description: 'Maximum number of results to return'
+              description: '返却する最大結果数'
             }
           }
         }
       },
       {
         name: 'confluence_get_page_by_id',
-        description: 'Get a specific page by its ID with optional includes',
+        description: 'IDを指定してページの詳細情報を取得します',
         inputSchema: {
           type: 'object',
           properties: {
             id: {
               type: ['string', 'number'],
-              description: 'The ID of the page to retrieve'
+              description: '取得するページのID'
             },
             bodyFormat: {
               type: 'string',
               enum: ['storage', 'atlas_doc_format', 'view'],
-              description: 'Content format to return in body field'
+              description: 'コンテンツ形式（bodyフィールドの返却形式）'
             },
             getDraft: {
               type: 'boolean',
-              description: 'Retrieve the draft version of the page'
+              description: 'ドラフト版のページを取得'
             },
             version: {
               type: 'number',
-              description: 'Retrieve a specific version number'
+              description: '特定のバージョン番号を取得'
             },
             includeLabels: {
               type: 'boolean',
-              description: 'Include labels associated with this page'
+              description: 'ページに関連するラベルを含める'
             },
             includeProperties: {
               type: 'boolean',
-              description: 'Include content properties'
+              description: 'コンテンツプロパティを含める'
             },
             includeOperations: {
               type: 'boolean',
-              description: 'Include permitted operations'
+              description: '許可された操作を含める'
             },
             includeLikes: {
               type: 'boolean',
-              description: 'Include likes information'
+              description: 'いいね情報を含める'
             },
             includeVersions: {
               type: 'boolean',
-              description: 'Include version history'
+              description: 'バージョン履歴を含める'
             }
           },
           required: ['id']
@@ -205,17 +205,17 @@ class ConfluenceMCPServer {
       },
       {
         name: 'confluence_create_page',
-        description: 'Create a new page in a space',
+        description: 'スペース内に新しいページを作成します',
         inputSchema: {
           type: 'object',
           properties: {
             spaceId: {
               type: 'number',
-              description: 'The ID of the space to create the page in'
+              description: 'ページを作成するスペースのID'
             },
             title: {
               type: 'string',
-              description: 'The title of the page'
+              description: 'ページのタイトル'
             },
             body: {
               type: 'object',
@@ -229,21 +229,21 @@ class ConfluenceMCPServer {
                   required: ['value', 'representation']
                 }
               },
-              description: 'The body content of the page'
+              description: 'ページの本文コンテンツ'
             },
             parentId: {
               type: 'number',
-              description: 'The ID of the parent page (optional)'
+              description: '親ページのID（任意）'
             },
             status: {
               type: 'string',
               enum: ['current', 'draft'],
               default: 'current',
-              description: 'The status of the page'
+              description: 'ページのステータス'
             },
             private: {
               type: 'boolean',
-              description: 'Whether the page should be private'
+              description: 'ページを非公開にするか'
             }
           },
           required: ['spaceId', 'title', 'body']
@@ -251,17 +251,17 @@ class ConfluenceMCPServer {
       },
       {
         name: 'confluence_update_page',
-        description: 'Update an existing page',
+        description: '既存のページを更新します',
         inputSchema: {
           type: 'object',
           properties: {
             id: {
               type: 'number',
-              description: 'The ID of the page to update'
+              description: '更新するページのID'
             },
             title: {
               type: 'string',
-              description: 'The new title of the page'
+              description: 'ページの新しいタイトル'
             },
             body: {
               type: 'object',
@@ -275,47 +275,45 @@ class ConfluenceMCPServer {
                   required: ['value', 'representation']
                 }
               },
-              description: 'The new body content of the page'
+              description: 'ページの新しい本文コンテンツ'
             },
             version: {
               type: 'object',
               properties: {
-                number: { type: 'number' },
                 message: { type: 'string' }
               },
-              required: ['number'],
-              description: 'Version information for the update'
+              description: '更新のバージョン情報（番号は自動インクリメント）'
             },
             parentId: {
               type: 'number',
-              description: 'The ID of the parent page'
+              description: '親ページのID'
             },
             status: {
               type: 'string',
               enum: ['current', 'draft'],
-              description: 'The status of the page'
+              description: 'ページのステータス'
             }
           },
-          required: ['id', 'version']
+          required: ['id']
         }
       },
       {
         name: 'confluence_delete_page',
-        description: 'Delete a page (moves to trash unless purged)',
+        description: 'ページを削除します（完全削除しない限りゴミ箱に移動）',
         inputSchema: {
           type: 'object',
           properties: {
             id: {
               type: 'number',
-              description: 'The ID of the page to delete'
+              description: '削除するページのID'
             },
             purge: {
               type: 'boolean',
-              description: 'Permanently delete the page (must be in trash first)'
+              description: 'ページを完全削除する（先にゴミ箱に入れる必要あり）'
             },
             draft: {
               type: 'boolean',
-              description: 'Delete a draft page'
+              description: 'ドラフトページを削除'
             }
           },
           required: ['id']
@@ -326,85 +324,85 @@ class ConfluenceMCPServer {
       // Space tools
       {
         name: 'confluence_get_spaces',
-        description: 'Get all spaces with optional filtering',
+        description: 'スペース一覧を取得します。各種フィルタリング機能付き',
         inputSchema: {
           type: 'object',
           properties: {
             id: {
               type: 'array',
               items: { type: 'number' },
-              description: 'Filter by space IDs'
+              description: 'スペースIDでフィルタリング'
             },
             key: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Filter by space keys'
+              description: 'スペースキーでフィルタリング'
             },
             type: {
               type: 'array',
               items: { type: 'string', enum: ['global', 'personal'] },
-              description: 'Filter by space type'
+              description: 'スペースタイプでフィルタリング'
             },
             status: {
               type: 'array',
               items: { type: 'string', enum: ['current', 'archived'] },
-              description: 'Filter by space status'
+              description: 'スペースステータスでフィルタリング'
             },
             favorite: {
               type: 'boolean',
-              description: 'Filter to only favorite spaces'
+              description: 'お気に入りスペースのみに絞り込み'
             },
             sort: {
               type: 'string',
-              description: 'Sort order'
+              description: 'ソート順'
             },
             limit: {
               type: 'number',
               minimum: 1,
               maximum: 250,
               default: 25,
-              description: 'Maximum number of results to return'
+              description: '返却する最大結果数'
             }
           }
         }
       },
       {
         name: 'confluence_get_space_by_id',
-        description: 'Get a specific space by its ID',
+        description: 'IDを指定してスペースの詳細情報を取得します',
         inputSchema: {
           type: 'object',
           properties: {
             id: {
               type: ['number', 'string'],
-              description: 'The ID or key of the space to retrieve'
+              description: '取得するスペースのIDまたはキー'
             },
             includeIcon: {
               type: 'boolean',
-              description: 'Include space icon'
+              description: 'スペースアイコンを含める'
             },
             includeDescription: {
               type: 'boolean',
-              description: 'Include space description'
+              description: 'スペースの説明を含める'
             },
             includeHomepage: {
               type: 'boolean',
-              description: 'Include homepage information'
+              description: 'ホームページ情報を含める'
             },
             includeOperations: {
               type: 'boolean',
-              description: 'Include permitted operations'
+              description: '許可された操作を含める'
             },
             includePermissions: {
               type: 'boolean',
-              description: 'Include space permissions'
+              description: 'スペース権限を含める'
             },
             includeProperties: {
               type: 'boolean',
-              description: 'Include space properties'
+              description: 'スペースプロパティを含める'
             },
             includeLabels: {
               type: 'boolean',
-              description: 'Include space labels'
+              description: 'スペースラベルを含める'
             }
           },
           required: ['id']
@@ -414,17 +412,17 @@ class ConfluenceMCPServer {
       // Content Search API (CQL)
       {
         name: 'confluence_search_content',
-        description: 'Search for content using CQL (Confluence Query Language)',
+        description: 'CQL（Confluence Query Language）を使用してコンテンツを検索します',
         inputSchema: {
           type: 'object',
           properties: {
             cql: {
               type: 'string',
-              description: 'CQL query string (e.g., "space=TEST AND type=page", "title~cheese")'
+              description: 'CQLクエリ文字列（例: "space=TEST AND type=page", "title~cheese"）'
             },
             expand: {
               type: 'string',
-              description: 'Properties to expand (e.g., "space,body.view,version")',
+              description: '展開するプロパティ（例: "space,body.view,version"）',
               default: 'space,version'
             },
             limit: {
@@ -432,13 +430,13 @@ class ConfluenceMCPServer {
               minimum: 1,
               maximum: 100,
               default: 25,
-              description: 'Maximum number of results to return'
+              description: '返却する最大結果数'
             },
             start: {
               type: 'number',
               minimum: 0,
               default: 0,
-              description: 'Starting index for pagination'
+              description: 'ページングの開始インデックス'
             }
           },
           required: ['cql']
@@ -448,13 +446,13 @@ class ConfluenceMCPServer {
       // Content Labels API
       {
         name: 'confluence_get_content_labels',
-        description: 'Get all labels for a piece of content',
+        description: 'コンテンツに付与されたラベル一覧を取得します',
         inputSchema: {
           type: 'object',
           properties: {
             id: {
               type: ['string', 'number'],
-              description: 'The ID of the content'
+              description: 'コンテンツのID'
             }
           },
           required: ['id']
@@ -462,17 +460,17 @@ class ConfluenceMCPServer {
       },
       {
         name: 'confluence_add_content_label',
-        description: 'Add a label to a piece of content',
+        description: 'コンテンツにラベルを追加します',
         inputSchema: {
           type: 'object',
           properties: {
             id: {
               type: ['string', 'number'],
-              description: 'The ID of the content'
+              description: 'コンテンツのID'
             },
             name: {
               type: 'string',
-              description: 'The name of the label to add'
+              description: '追加するラベルの名前'
             }
           },
           required: ['id', 'name']
@@ -482,7 +480,7 @@ class ConfluenceMCPServer {
       // User tools
       {
         name: 'confluence_get_current_user',
-        description: 'Get information about the current authenticated user',
+        description: '現在認証されているユーザーの情報を取得します',
         inputSchema: {
           type: 'object',
           properties: {}
@@ -490,13 +488,13 @@ class ConfluenceMCPServer {
       },
       {
         name: 'confluence_get_user_by_id',
-        description: 'Get a specific user by account ID',
+        description: 'アカウントIDを指定してユーザー情報を取得します',
         inputSchema: {
           type: 'object',
           properties: {
             accountId: {
               type: 'string',
-              description: 'The account ID of the user to retrieve'
+              description: '取得するユーザーのアカウントID'
             }
           },
           required: ['accountId']
@@ -504,26 +502,26 @@ class ConfluenceMCPServer {
       },
       {
         name: 'confluence_get_users',
-        description: 'Get users with optional filtering',
+        description: 'ユーザーを検索・一覧取得します。フィルタリング機能付き',
         inputSchema: {
           type: 'object',
           properties: {
             query: {
               type: 'string',
-              description: 'Query string to filter users by username or display name'
+              description: 'ユーザー名または表示名でフィルタリングするクエリ文字列'
             },
             limit: {
               type: 'number',
               minimum: 1,
               maximum: 200,
               default: 50,
-              description: 'Maximum number of users to return'
+              description: '返却する最大ユーザー数'
             },
             start: {
               type: 'number',
               minimum: 0,
               default: 0,
-              description: 'Starting index for pagination'
+              description: 'ページングの開始インデックス'
             }
           }
         }
@@ -533,25 +531,25 @@ class ConfluenceMCPServer {
       // Markdown conversion tools
       {
         name: 'confluence_page_to_markdown',
-        description: 'Convert a Confluence page to Markdown and save to file',
+        description: 'ConfluenceページをMarkdown形式に変換してファイルに保存します',
         inputSchema: {
           type: 'object',
           properties: {
             pageId: {
               type: 'number',
-              description: 'The ID of the page to convert'
+              description: '変換するページのID'
             },
             filePath: {
               type: 'string',
-              description: 'Output file path (optional, .md extension will be added if missing)'
+              description: '出力ファイルパス（任意、.md拡張子が自動付与）'
             },
             outputDir: {
               type: 'string',
-              description: 'Output directory (default: ./exports)'
+              description: '出力ディレクトリ（デフォルト: ./exports）'
             },
             includeMetadata: {
               type: 'boolean',
-              description: 'Include page metadata as front matter (default: true)'
+              description: 'ページメタデータをフロントマターとして含める（デフォルト: true）'
             }
           },
           required: ['pageId']
@@ -559,27 +557,27 @@ class ConfluenceMCPServer {
       },
       {
         name: 'confluence_markdown_to_page',
-        description: 'Create a Confluence page from a Markdown file',
+        description: 'Markdownファイルからconfluenceページを作成します',
         inputSchema: {
           type: 'object',
           properties: {
             filePath: {
               type: 'string',
-              description: 'Path to the Markdown file to upload'
+              description: 'アップロードするMarkdownファイルのパス'
             },
             spaceId: {
               type: 'number',
-              description: 'The ID of the space to create the page in'
+              description: 'ページを作成するスペースのID'
             },
             parentId: {
               type: 'number',
-              description: 'The ID of the parent page (optional)'
+              description: '親ページのID（任意）'
             },
             status: {
               type: 'string',
               enum: ['current', 'draft'],
               default: 'current',
-              description: 'The status of the page'
+              description: 'ページのステータス'
             }
           },
           required: ['filePath', 'spaceId']
@@ -587,21 +585,21 @@ class ConfluenceMCPServer {
       },
       {
         name: 'confluence_update_page_from_markdown',
-        description: 'Update an existing Confluence page with content from a Markdown file',
+        description: 'Markdownファイルの内容で既存のConfluenceページを更新します',
         inputSchema: {
           type: 'object',
           properties: {
             pageId: {
               type: 'number',
-              description: 'The ID of the page to update'
+              description: '更新するページのID'
             },
             filePath: {
               type: 'string',
-              description: 'Path to the Markdown file'
+              description: 'Markdownファイルのパス'
             },
             versionMessage: {
               type: 'string',
-              description: 'Version update message (optional)'
+              description: 'バージョン更新メッセージ（任意）'
             }
           },
           required: ['pageId', 'filePath']
@@ -610,21 +608,21 @@ class ConfluenceMCPServer {
 
       {
         name: 'confluence_export_space_to_markdown',
-        description: 'Export all pages in a space to Markdown files',
+        description: 'スペース内の全ページをMarkdownファイルとしてエクスポートします',
         inputSchema: {
           type: 'object',
           properties: {
             spaceId: {
               type: 'number',
-              description: 'The ID of the space to export'
+              description: 'エクスポートするスペースのID'
             },
             outputDir: {
               type: 'string',
-              description: 'Output directory for the exported files'
+              description: 'エクスポートファイルの出力ディレクトリ'
             },
             includeMetadata: {
               type: 'boolean',
-              description: 'Include page metadata as front matter (default: true)'
+              description: 'ページメタデータをフロントマターとして含める（デフォルト: true）'
             }
           },
           required: ['spaceId', 'outputDir']
@@ -658,7 +656,16 @@ class ConfluenceMCPServer {
           return { content: [{ type: "text", text: JSON.stringify(createdPage, null, 2) }] };
 
         case 'confluence_update_page':
-          const updatedPage = await client.updatePage(args as any);
+          // 現在のページ情報を取得してバージョン番号を自動インクリメント
+          const currentPage = await client.getPageById(args.id as string | number);
+          const updateArgs = {
+            ...args,
+            version: {
+              number: currentPage.version.number + 1,
+              message: (args.version as any)?.message || 'Updated via MCP API'
+            }
+          };
+          const updatedPage = await client.updatePage(updateArgs as any);
           return { content: [{ type: "text", text: JSON.stringify(updatedPage, null, 2) }] };
 
         case 'confluence_delete_page':

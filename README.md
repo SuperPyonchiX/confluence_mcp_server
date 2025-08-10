@@ -1,112 +1,115 @@
-# Confluence MCP Server (DataCenter Edition)
+# Confluence MCP Server（DataCenter版）
 
-A comprehensive Model Context Protocol (MCP) server that provides access to Confluence DataCenter/Server REST API. Enables AI agents to interact with Confluence spaces, pages, users, and advanced search capabilities.
+Confluence DataCenter/Server環境向けのModel Context Protocol（MCP）サーバーです。AIエージェントがConfluenceのスペース、ページ、ユーザー、検索機能と効率的にやり取りできるよう設計されています。
 
-## Supported Versions
-
-- ✅ **Confluence DataCenter/Server** - REST API v1 with Basic Authentication (username/password)
-
-## DataCenter Edition Features
-
-- **Enhanced Search**: CQL-powered content search capabilities
-- **Label Management**: Content organization through labels
-- **User Discovery**: Advanced user search and management
-- **Complete CRUD Operations**: Full content lifecycle management
-- **Markdown Integration**: Bi-directional Markdown conversion
-- **VS Code MCP Integration**: Optimized for VS Code environments
-
-## 🚀 Core Features
-
-### Content Management
-- **Pages**: Complete CRUD operations (Create, Read, Update, Delete)
-- **Spaces**: Space information retrieval and management
-- **Search**: Advanced CQL-based content search
-
-### Advanced Capabilities ⭐
-- **CQL Search**: Powerful Confluence Query Language for content discovery
-- **Label System**: Content categorization and organization
-- **User Management**: User search and information retrieval
-
-### Markdown Conversion Suite ⭐ 
-- **Page→Markdown**: Export Confluence pages as local Markdown files
-- **Markdown→Page**: Create Confluence pages from Markdown files
-- **Page Updates**: Update Confluence pages using Markdown files
-- **Bulk Export**: Export entire spaces as Markdown file collections
-
-## Available Tools (16 APIs)
-
-### 📄 Content APIs
-
-### 📄 Content APIs
-
-#### Page Operations (5 APIs)
-- `confluence_get_pages` - Retrieve page listings with filtering
-- `confluence_get_page_by_id` - Get specific page details
-- `confluence_create_page` - Create new pages
-- `confluence_update_page` - Update existing pages ⭐ DataCenter optimized
-- `confluence_delete_page` - Delete pages ⭐ DataCenter optimized
-
-#### Advanced Search & Labels (3 APIs) ⭐ **NEW**
-- `confluence_search_content` - CQL-powered content search
-- `confluence_get_content_labels` - Retrieve content labels
-- `confluence_add_content_label` - Add labels to content
-
-### 🏢 Space APIs (2 APIs)
-- `confluence_get_spaces` - List available spaces
-- `confluence_get_space_by_id` - Get detailed space information
-
-### 👥 User APIs (3 APIs)
-- `confluence_get_current_user` - Get current user information  
-- `confluence_get_user_by_id` - Get specific user details
-- `confluence_get_users` - Search and list users ⭐ **NEW**
-
-### 📝 Markdown Conversion APIs (3 APIs) ⭐
-- `confluence_page_to_markdown` - Export pages as Markdown files
-- `confluence_markdown_to_page` - Create pages from Markdown files
-- `confluence_export_space_to_markdown` - Export entire spaces to Markdown
-
-### 🚫 Removed Cloud-Only Features
-The following features are not available in DataCenter and have been removed from this version:
-- Blog Post APIs (5 APIs) - Cloud-exclusive functionality
-- Advanced Management APIs (11 APIs) - Cloud-exclusive administrative features
-
-## Installation & Setup
-
-### Prerequisites
-
-- Node.js 18 or higher
-- Access to a Confluence DataCenter/Server instance  
-- Valid username and password for authentication
-
-### Setup Instructions
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd confluence_mcp_server
-   ```
-
-2. **依存関係のインストール**
-   ```bash
-   npm install
-   ```
-
-3. **ビルド**
-   ```bash
-   npm run build
-   ```
-
-## 設定
-
-### Confluence DataCenter/Server（Basic認証）
-
-DataCenter/Server版では、ユーザー名とパスワードを使用します：
-
+## 📋 概要### テストの実行
 ```bash
-# .env ファイルを作成
-cp .env.example .env
+# 全17APIのテスト実行
+cd test
+./confluence_datacenter_17_apis.bat
+```MCPサーバーは、Confluence DataCenter/Serverの**17の主要API**を提供し、以下の機能を実現します：
 
-# .env ファイルを編集（DataCenter/Server版）
+- 📄 **ページ管理**: 作成・読取・更新・削除の完全なCRUD操作
+- 🔍 **高度な検索**: CQL（Confluence Query Language）による強力な検索機能
+- 🏷️ **ラベル管理**: コンテンツの分類・整理機能
+- 👥 **ユーザー管理**: ユーザー検索・情報取得機能
+- 🏢 **スペース管理**: スペース情報の取得・管理
+- � **Markdown変換**: ConfluenceページとMarkdownの相互変換
+
+## 🎯 対応バージョン
+
+- ✅ **Confluence DataCenter/Server** - REST API v1 + Basic認証（ユーザー名・パスワード）
+- ❌ **Confluence Cloud** - このバージョンでは未対応
+
+## 📚 API一覧（全17API）
+
+### 📄 ページ管理API（5個）
+
+| API名 | 機能 | 使用場面 |
+|-------|------|----------|
+| `confluence_get_pages` | ページ一覧取得・フィルタリング | スペース内のページを検索・一覧表示 |
+| `confluence_get_page_by_id` | 特定ページの詳細情報取得 | ページIDによる個別ページの情報取得 |
+| `confluence_create_page` | 新しいページの作成 | 新規ドキュメント・記事の作成 |
+| `confluence_update_page` | 既存ページの更新 | ページ内容・タイトルの変更 |
+| `confluence_delete_page` | ページの削除 | 不要なページの削除 |
+
+### 🔍 検索・ラベル管理API（3個）⭐**新機能**
+
+| API名 | 機能 | 使用場面 |
+|-------|------|----------|
+| `confluence_search_content` | CQL検索によるコンテンツ検索 | 高度な条件でのページ・コンテンツ検索 |
+| `confluence_get_content_labels` | コンテンツのラベル取得 | ページに付与されたラベルの確認 |
+| `confluence_add_content_label` | コンテンツへのラベル追加 | ページの分類・タグ付け |
+
+### 🏢 スペース管理API（2個）
+
+| API名 | 機能 | 使用場面 |
+|-------|------|----------|
+| `confluence_get_spaces` | スペース一覧の取得 | 利用可能なスペースの確認 |
+| `confluence_get_space_by_id` | 特定スペースの詳細情報取得 | スペースIDによる個別情報取得 |
+
+### 👥 ユーザー管理API（3個）
+
+| API名 | 機能 | 使用場面 |
+|-------|------|----------|
+| `confluence_get_current_user` | 現在のユーザー情報取得 | 認証ユーザーの情報確認 |
+| `confluence_get_user_by_id` | 特定ユーザーの詳細情報取得 | ユーザーIDによる個別情報取得 |
+| `confluence_get_users` | ユーザー検索・一覧取得 | ユーザー名での検索・一覧表示⭐**新機能** |
+
+### 📝 Markdown変換API（4個）⭐**特徴機能**
+
+| API名 | 機能 | 使用場面 |
+|-------|------|----------|
+| `confluence_page_to_markdown` | ページをMarkdownファイルに変換 | ローカルでの編集・バックアップ作成 |
+| `confluence_markdown_to_page` | Markdownファイルからページ作成 | 外部で作成したドキュメントの取り込み |
+| `confluence_update_page_from_markdown` | Markdownファイルで既存ページを更新 | Markdown編集後の更新作業 |
+| `confluence_export_space_to_markdown` | スペース全体をMarkdown形式でエクスポート | スペース全体のバックアップ・移行 |
+
+## � 主な特徴
+
+### DataCenter版専用最適化
+- **REST API v1対応**: DataCenter/Server環境に特化
+- **Basic認証**: ユーザー名・パスワードによる認証
+- **高性能**: 不要なAPI呼び出しを削減した効率的な実装
+
+### 高度な検索機能
+- **CQL（Confluence Query Language）**: 強力な検索クエリをサポート
+- **柔軟なフィルタリング**: 作成者、日付、スペース等での詳細検索
+
+### Markdown統合機能
+- **双方向変換**: Confluence ⇔ Markdown の相互変換
+- **一括エクスポート**: スペース全体を一括でMarkdown化
+- **メタデータ保持**: ページ情報を適切に保持
+
+## 📦 インストール・セットアップ
+
+### 前提条件
+- Node.js 18以上
+- Confluence DataCenter/Server へのアクセス権
+- 有効なユーザー名・パスワード
+
+### 1. プロジェクトの準備
+```bash
+# リポジトリのクローン
+git clone <repository-url>
+cd confluence_mcp_server
+
+# 依存関係のインストール
+npm install
+
+# TypeScriptのビルド
+npm run build
+```
+
+### 2. 環境設定
+```bash
+# 環境設定ファイルの作成
+cp .env.example .env
+```
+
+`.env`ファイルを編集：
+```bash
+# Confluence DataCenter/Server の設定
 CONFLUENCE_DOMAIN=localhost:8090
 CONFLUENCE_AUTH_TYPE=basic
 CONFLUENCE_USERNAME=your-username
@@ -114,20 +117,9 @@ CONFLUENCE_PASSWORD=your-password
 CONFLUENCE_BASE_URL=http://localhost:8090/rest/api
 ```
 
-**重要な注意点:**
-- DataCenter版では REST API v1 (`/rest/api`) を使用
-- Basic認証（ユーザー名・パスワード）を使用
-- HTTPSでない場合もありますが、本番環境では推奨されません
+### 3. VS Code MCP設定
 
-## VS Code での設定
-
-### 1. MCP Extension のインストール
-
-VS Code で MCP サーバーを使用するには、対応する拡張機能をインストールする必要があります。
-
-### 2. 設定ファイルの作成
-
-**Confluence DataCenter/Server版の場合:**
+VS Code設定ファイルに以下を追加：
 ```json
 {
   "mcp": {
@@ -146,159 +138,110 @@ VS Code で MCP サーバーを使用するには、対応する拡張機能を�
 }
 ```
 
-## 使用例
+## 💡 使用例
 
-### 動作確認
+### 基本的な操作
 
-VS Code で以下のコマンドを実行してテストします：
-
+#### スペースの確認
 ```
-Confluenceのスペース一覧を表示してください
-```
-
-### ページの作成
-
-```
-TESTスペースに「API仕様書」というタイトルでページを作成してください。内容は以下の通りです：
-
-# API仕様書
-
-## 概要
-この文書ではAPIの仕様について説明します。
-
-## エンドポイント
-- GET /api/users
-- POST /api/users
+「利用可能なConfluenceスペース一覧を表示してください」
 ```
 
-### ページの更新
-
+#### ページの検索
 ```
-ページID 163841 のタイトルを「更新されたAPI仕様書」に変更し、内容も更新してください
-```
-
-### ページの削除
-
-```
-テストページ（ID: 163945）を削除してください
+「タイトルに'API'を含むページをCQL検索で探してください」
 ```
 
-### Markdown変換機能の使用 ⭐
-
-#### ConfluenceページをMarkdownに変換
-
+#### ページの作成
 ```
-ページID 163841 をMarkdownファイルに変換して、./docs/api-spec.md として保存してください
+「DOCスペースに『開発ガイドライン』というタイトルで新しいページを作成してください」
 ```
 
-#### MarkdownファイルからConfluenceページを作成
+### 高度な機能
 
+#### CQL検索の活用
 ```
-./docs/user-guide.md ファイルからTESTスペースにConfluenceページを作成してください
-```
-
-#### 既存ページをMarkdownで更新
-
-```
-./README.md ファイルの内容でページID 163841 を更新してください。バージョンメッセージは「ドキュメント更新」としてください
+「スペースがTESTで、最終更新が2024年以降のページを検索してください」
 ```
 
-#### スペース全体をMarkdownにエクスポート
-
+#### ラベル管理
 ```
-TESTスペース（ID: 131083）のすべてのページを ./export/TEST_space/ ディレクトリにMarkdownファイルとしてエクスポートしてください
+「ページID 12345 に『重要』と『開発』のラベルを追加してください」
 ```
 
-## トラブルシューティング
+#### Markdown変換
+```
+「ページID 67890 をMarkdownファイルに変換して、./docs/guide.md として保存してください」
+```
 
-### 認証エラー
-- ユーザー名とパスワードが正しいか確認
-- Confluenceドメインが正しいか確認
-- ユーザーアカウントがアクティブか確認
+#### 一括エクスポート
+```
+「DOCスペース全体を ./backup/DOC_space/ にMarkdown形式でエクスポートしてください」
+```
 
-### 権限エラー
-- 操作対象のスペース/ページへのアクセス権限があるか確認
-- ページの編集権限があるか確認
-
-### 接続エラー
-- Confluenceサーバーが起動しているか確認
-- ネットワーク接続を確認
-- ポート番号（通常8090）が正しいか確認
-
-### DataCenter版でよくある問題
-
-1. **SSL証明書エラー**
-   - 自己署名証明書を使用している場合: `NODE_TLS_REJECT_UNAUTHORIZED=0`（開発環境のみ）
-
-2. **ポート設定**
-   - デフォルトは8090ポートですが、環境に応じて調整が必要
-
-3. **権限設定**
-   - Confluence管理画面でユーザーの権限設定を確認
-
-## 開発とテスト
+## 🔧 開発・テスト
 
 ### テストの実行
-
-DataCenter版API対応テスト：
-
 ```bash
-# 全16APIのテスト実行
+# 全16APIの動作テスト
 cd test
 ./confluence_datacenter_16_apis.bat
 ```
 
 ### 開発モードでの実行
-
 ```bash
 npm run dev
 ```
 
-## API カバレッジ（DataCenter版）
+## ⚠️ トラブルシューティング
 
-このサーバーは以下のConfluence DataCenter API エンドポイントをサポートしています：
+### よくある問題と解決策
 
-✅ **サポート済み（16 APIs）:**
-- `/content` - ページ管理（CRUD操作）
-- `/content/search` - CQL検索（高度な検索機能） ⭐ **NEW**
-- `/content/{id}/label` - ラベル管理 ⭐ **NEW**
-- `/space` - スペース情報
-- `/user` - ユーザー情報と検索 ⭐ **Enhanced**
+#### 認証エラー
+- ✅ ユーザー名・パスワードの確認
+- ✅ アカウントの有効性確認
+- ✅ ドメイン設定の確認
 
-❌ **未サポート（DataCenter制限）:**
-- Blog Post関連エンドポイント
-- 添付ファイル管理
-- 高度な管理機能
+#### 権限エラー
+- ✅ スペース・ページへのアクセス権限確認
+- ✅ 編集権限の確認
+- ✅ 管理者権限の必要性確認
 
-## 認証
+#### 接続エラー
+- ✅ Confluenceサーバーの起動状態確認
+- ✅ ネットワーク接続の確認
+- ✅ ポート番号（通常8090）の確認
+- ✅ SSL証明書の問題（開発環境では`NODE_TLS_REJECT_UNAUTHORIZED=0`）
 
-- **Basic認証**: Confluence DataCenter/Server用（ユーザー名 + パスワード）
+## 📊 技術仕様
 
-## エラーハンドリング
+### サポート対象
+- **REST API**: `/rest/api` v1エンドポイント
+- **認証方式**: Basic認証（ユーザー名・パスワード）
+- **コンテンツ形式**: Storage format、Markdown
+- **検索言語**: CQL（Confluence Query Language）
 
-サーバーは以下について包括的なエラーハンドリングを提供します：
-- Basic認証失敗
-- 権限拒否シナリオ
-- 無効なリクエストとパラメータ
-- ネットワークとAPI接続の問題
-- DataCenter特有のエラー処理
+### パフォーマンス最適化
+- DataCenter専用の効率的なAPI呼び出し
+- 最小限のネットワーク通信
+- 適切なエラーハンドリング
+- メモリ使用量の最適化
 
-## パフォーマンス
+## 🤝 貢献・開発参加
 
-### 最適化された機能
-- DataCenter REST API v1に特化
-- 不要なAPI呼び出しを削減
-- 効率的なMarkdown変換
-- VS Code MCP統合に最適化
+1. リポジトリのフォーク
+2. フィーチャーブランチの作成
+3. 変更の実装
+4. テストの実行
+5. プルリクエストの提出
 
-## 貢献
+## 📄 ライセンス
 
-1. リポジトリをフォーク
-2. フィーチャーブランチを作成
-3. 変更を加える
-4. DataCenter環境でテストを実行
-5. プルリクエストを提出
+MIT License - 詳細は`LICENSE`ファイルを参照
 
-## ライセンス
+---
 
-MIT License - 詳細はLICENSEファイルを参照してください
+## 📈 バージョン履歴
+
+- **v2.1.0**: CQL検索、ラベル管理、ユーザー検索機能を追加（17API対応）
+- **v2.0.0**: DataCenter版初回リリース（13API対応）
