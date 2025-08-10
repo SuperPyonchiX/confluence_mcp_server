@@ -9,6 +9,20 @@ echo ===========================================================================
 
 cd /d "%~dp0.."
 
+REM 🔐 Confluence DataCenter認証情報の設定
+echo 🔐 Setting Confluence DataCenter authentication...
+set CONFLUENCE_DOMAIN=localhost:8090
+set CONFLUENCE_AUTH_TYPE=basic
+set CONFLUENCE_USERNAME=kosuke
+set CONFLUENCE_PASSWORD=Ksk0112010602030
+
+echo ✅ Authentication configured:
+echo   Domain: %CONFLUENCE_DOMAIN%
+echo   Auth Type: %CONFLUENCE_AUTH_TYPE%
+echo   Username: %CONFLUENCE_USERNAME%
+echo   Password: [PROTECTED]
+echo.
+
 set SUCCESS=0
 set FAIL=0
 
@@ -34,7 +48,7 @@ if !ERRORLEVEL! EQU 0 (echo ✅ SUCCESS && set /a SUCCESS+=1) else (echo ❌ FAI
 
 echo.
 echo Testing API 5/17: get_page_by_id
-echo {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"confluence_get_page_by_id","arguments":{"id":163841}}} | node build/index.js
+echo {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"confluence_get_page_by_id","arguments":{"id":163938}}} | node build/index.js
 if !ERRORLEVEL! EQU 0 (echo ✅ SUCCESS && set /a SUCCESS+=1) else (echo ❌ FAIL && set /a FAIL+=1)
 
 echo.
