@@ -171,6 +171,10 @@ VS Code設定ファイルに以下を追加：
 「ページID 67890 をMarkdownファイルに変換して、./docs/guide.md として保存してください」
 ```
 
+**注意**: `confluence_page_to_markdown` と `confluence_markdown_to_page` では、ファイルパスは**絶対パス**で指定してください。
+- ✅ 正しい例: `C:\Users\username\Documents\guide.md`
+- ❌ 間違った例: `./docs/guide.md` (相対パス)
+
 #### 一括エクスポート
 ```
 「DOCスペース全体を ./backup/DOC_space/ にMarkdown形式でエクスポートしてください」

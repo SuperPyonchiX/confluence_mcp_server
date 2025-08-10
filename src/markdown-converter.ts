@@ -46,11 +46,88 @@ export class MarkdownConverter {
   }
 
   private setupConfluenceRules(): void {
-    // Confluenceのマクロ処理
-    this.turndownService.addRule('confluenceMacros', {
+    // Confluenceのコードマクロ処理 - より汎用的なアプローチ
+    this.turndownService.addRule('confluenceCodeMacro', {
       filter: (node: any) => {
-        return node.nodeName === 'AC:STRUCTURED-MACRO' || 
-               (node as Element).hasAttribute?.('ac:name');
+        // 大文字小文字を問わずにチェック
+        const nodeName = node.nodeName?.toLowerCase() || '';
+        const macroName = (node as Element).getAttribute?.('ac:name') || '';
+        return nodeName === 'ac:structured-macro' && macroName === 'code';
+      },
+      replacement: (_content: string, node: any) => {
+        const element = node as Element;
+        
+        console.log('Processing code macro, innerHTML:', element.innerHTML.substring(0, 200));
+        
+        // 言語パラメータを取得 - より広範囲に検索
+        let language = '';
+        
+        // すべての子要素をチェックして言語パラメータを見つける
+        const allChildren = element.querySelectorAll('*');
+        for (const child of allChildren) {
+          if (child.getAttribute('ac:name') === 'language') {
+            language = child.textContent?.trim() || '';
+            break;
+          }
+        }
+        
+        console.log('Language found:', language);
+        
+        // コード内容を取得 - CDATAを含む可能性のある要素を探す
+        let codeContent = '';
+        const allTextNodes = element.querySelectorAll('*');
+        for (const textNode of allTextNodes) {
+          const nodeName = textNode.nodeName?.toLowerCase() || '';
+          if (nodeName === 'ac:plain-text-body') {
+            const rawHTML = textNode.innerHTML || '';
+            const rawText = textNode.textContent || '';
+            
+            console.log('Found plain-text-body, innerHTML:', rawHTML);
+            console.log('Found plain-text-body, textContent:', rawText);
+            
+            // CDATAセクションをチェック
+            const cdataMatch = rawHTML.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
+            if (cdataMatch && cdataMatch[1] !== undefined) {
+              codeContent = cdataMatch[1].trim();
+              console.log('Extracted CDATA content:', codeContent);
+            } else {
+              codeContent = rawText.trim();
+              console.log('Using textContent:', codeContent);
+            }
+            break;
+          }
+        }
+        
+        const result = `\n\`\`\`${language}\n${codeContent}\n\`\`\`\n`;
+        console.log('Final markdown result:', result);
+        return result;
+      }
+    });
+
+    // 前処理されたコードブロック用のルール
+    this.turndownService.addRule('preprocessedCodeBlocks', {
+      filter: (node: any) => {
+        return node.nodeName === 'PRE' && 
+               node.querySelector('code[data-language]');
+      },
+      replacement: (_content: string, node: any) => {
+        const codeElement = node.querySelector('code[data-language]');
+        if (codeElement) {
+          const language = codeElement.getAttribute('data-language') || '';
+          const codeContent = codeElement.textContent || '';
+          
+          console.log('TurndownService processing code with language:', language);
+          console.log('Code content:', codeContent.substring(0, 100));
+          
+          return `\n\`\`\`${language}\n${codeContent}\n\`\`\`\n`;
+        }
+        return _content;
+      }
+    });
+    this.turndownService.addRule('confluenceOtherMacros', {
+      filter: (node: any) => {
+        return node.nodeName === 'AC:STRUCTURED-MACRO' && 
+               (node as Element).getAttribute?.('ac:name') !== 'code';
       },
       replacement: (content: string, node: any) => {
         const macroName = (node as Element).getAttribute?.('ac:name') || 'unknown';
@@ -58,12 +135,14 @@ export class MarkdownConverter {
       }
     });
 
-    // コードブロックの改善
+    // 通常のコードブロックの処理（data-language属性のないpre要素のみ）
     this.turndownService.addRule('codeBlock', {
-      filter: ['pre'],
-      replacement: (content: string, node: any) => {
-        const language = (node as Element).getAttribute?.('data-language') || '';
-        return `\n\`\`\`${language}\n${content}\n\`\`\`\n`;
+      filter: (node: any) => {
+        return node.nodeName === 'PRE' && 
+               !node.querySelector('code[data-language]');
+      },
+      replacement: (content: string, _node: any) => {
+        return `\n\`\`\`\n${content}\n\`\`\`\n`;
       }
     });
 
@@ -80,7 +159,9 @@ export class MarkdownConverter {
    * ConfluenceのStorage形式のHTMLをMarkdownに変換
    */
   confluenceToMarkdown(storageContent: string, metadata?: any): string {
-    let markdown = this.turndownService.turndown(storageContent);
+    // Confluenceの特殊マクロを前処理
+    const preprocessedContent = this.preprocessConfluenceHtml(storageContent);
+    let markdown = this.turndownService.turndown(preprocessedContent);
 
     // メタデータをフロントマターとして追加
     if (metadata) {
@@ -89,6 +170,42 @@ export class MarkdownConverter {
     }
 
     return this.cleanupMarkdown(markdown);
+  }
+
+  /**
+   * Confluenceの特殊なHTMLを前処理する
+   */
+  private preprocessConfluenceHtml(html: string): string {
+    // コードマクロを標準的なHTMLのpreタグに変換
+    let processedHtml = html.replace(
+      /<ac:structured-macro ac:name="code"[^>]*?>(.*?)<\/ac:structured-macro>/gs,
+      (match) => {
+        // 言語パラメータを抽出
+        const languageMatch = match.match(/<ac:parameter ac:name="language">([^<]*)<\/ac:parameter>/);
+        const language = (languageMatch && languageMatch[1]) ? languageMatch[1].trim() : '';
+        
+        // コード内容を抽出 (CDATA内から)
+        const cdataMatch = match.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
+        const codeContent = (cdataMatch && cdataMatch[1]) ? cdataMatch[1].trim() : '';
+        
+        // 標準的なpreタグとして返す（言語情報はdata属性で保持）
+        return `<pre><code data-language="${language}">${this.escapeHtml(codeContent)}</code></pre>`;
+      }
+    );
+
+    return processedHtml;
+  }
+
+  /**
+   * HTMLエスケープ
+   */
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   /**

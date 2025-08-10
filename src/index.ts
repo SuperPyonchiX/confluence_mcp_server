@@ -547,11 +547,11 @@ class ConfluenceMCPServer {
             },
             filePath: {
               type: 'string',
-              description: '出力ファイルパス（任意、.md拡張子が自動付与）'
+              description: '出力ファイルパス（絶対パスで指定、.md拡張子が自動付与）。例: "C:/Users/ユーザ名/Documents/export.md"'
             },
             outputDir: {
               type: 'string',
-              description: '出力ディレクトリ（デフォルト: ./exports）'
+              description: '出力ディレクトリ（絶対パスで指定、未指定時はC:/Users/<ユーザ名>/に保存）。例: "C:/Users/ユーザ名/Documents/exports"'
             },
             includeMetadata: {
               type: 'boolean',
@@ -569,7 +569,7 @@ class ConfluenceMCPServer {
           properties: {
             filePath: {
               type: 'string',
-              description: 'アップロードするMarkdownファイルのパス'
+              description: 'アップロードするMarkdownファイルのパス（絶対パスで指定）。例: "C:/Users/ユーザ名/Documents/page.md"'
             },
             spaceId: {
               oneOf: [
@@ -604,7 +604,7 @@ class ConfluenceMCPServer {
             },
             filePath: {
               type: 'string',
-              description: 'Markdownファイルのパス'
+              description: 'Markdownファイルのパス（絶対パスで指定）。例: "C:/Users/ユーザ名/Documents/updated_page.md"'
             },
             versionMessage: {
               type: 'string',
@@ -627,7 +627,7 @@ class ConfluenceMCPServer {
             },
             outputDir: {
               type: 'string',
-              description: 'エクスポートファイルの出力ディレクトリ'
+              description: 'エクスポートファイルの出力ディレクトリ（絶対パスで指定）。例: "C:/Users/ユーザ名/Documents/confluence_export"'
             },
             includeMetadata: {
               type: 'boolean',
