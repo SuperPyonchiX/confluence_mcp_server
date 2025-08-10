@@ -1,21 +1,25 @@
 {
   "name": "confluence-mcp-server",
-  "version": "1.0.0",
-  "description": "Model Context Protocol server for Confluence Cloud REST API v2",
+  "version": "2.1.0",
+  "description": "Model Context Protocol server for Confluence DataCenter with 16 APIs including CQL search, label management, user discovery, and Markdown conversion",
   "main": "build/index.js",
   "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
     "dev": "tsx src/index.ts",
-    "test": "jest"
+    "test": "jest",
+    "test:datacenter": "cd test && confluence_all_32_direct.bat"
   },
   "keywords": [
     "mcp",
     "confluence",
     "atlassian",
+    "datacenter",
+    "server",
     "api",
-    "server"
+    "markdown",
+    "conversion"
   ],
   "author": "Your Name",
   "license": "MIT",

@@ -48,3 +48,6 @@ logs/
 # Cache
 .cache/
 .parcel-cache/
+
+# test
+export-test/

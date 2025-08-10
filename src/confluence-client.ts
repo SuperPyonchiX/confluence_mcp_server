@@ -104,8 +104,12 @@ export class ConfluenceApiClient {
       searchParams.append('id', params.id.join(','));
     }
     if (params?.spaceId) {
-      const paramName = isDataCenter ? 'spaceKey' : 'space-id';
-      searchParams.append(paramName, params.spaceId.join(','));
+      if (isDataCenter) {
+        // DataCenter版ではspaceパラメータを使用（spaceIdまたはspaceKey）
+        searchParams.append('space', params.spaceId.join(','));
+      } else {
+        searchParams.append('space-id', params.spaceId.join(','));
+      }
     }
     if (params?.status) {
       params.status.forEach(status => searchParams.append('status', status));
@@ -113,9 +117,11 @@ export class ConfluenceApiClient {
     if (params?.title) {
       searchParams.append('title', params.title);
     }
-    if (params?.bodyFormat) {
-      const paramName = isDataCenter ? 'expand' : 'body-format';
-      searchParams.append(paramName, params.bodyFormat);
+    if (params?.bodyFormat && !isDataCenter) {
+      searchParams.append('body-format', params.bodyFormat);
+    } else if (params?.bodyFormat && isDataCenter) {
+      // DataCenter版では expand パラメータを使用
+      searchParams.append('expand', 'body.storage,version');
     }
     if (params?.sort) {
       searchParams.append('sort', params.sort);
@@ -125,24 +131,26 @@ export class ConfluenceApiClient {
       searchParams.append('cursor', params.cursor);
     }
     if (params?.limit) {
-      searchParams.append('limit', params.limit.toString());
+      const limitParam = isDataCenter ? 'limit' : 'limit';
+      searchParams.append(limitParam, params.limit.toString());
     }
 
     const endpoint = isDataCenter ? '/content' : '/pages';
     const response = await this.client.get(`${endpoint}?${searchParams}`);
     
     // DataCenter版のレスポンス形式を統一
-    if (isDataCenter && response.data.results) {
+    if (isDataCenter) {
+      // DataCenter版では直接results配列を返す
       return {
-        results: response.data.results,
-        _links: response.data._links
+        results: response.data.results || [],
+        _links: response.data._links || {}
       };
     }
     
     return response.data;
   }
 
-  async getPageById(id: number, options?: {
+  async getPageById(id: string | number, options?: {
     bodyFormat?: 'storage' | 'atlas_doc_format' | 'view';
     getDraft?: boolean;
     status?: string[];
@@ -158,76 +166,147 @@ export class ConfluenceApiClient {
     includeCollaborators?: boolean;
   }): Promise<Page> {
     const searchParams = new URLSearchParams();
+    const isDataCenter = this.config.authType === 'basic';
     
-    if (options?.bodyFormat) {
-      searchParams.append('body-format', options.bodyFormat);
-    }
-    if (options?.getDraft) {
-      searchParams.append('get-draft', 'true');
-    }
-    if (options?.status) {
-      options.status.forEach(status => searchParams.append('status', status));
-    }
-    if (options?.version) {
-      searchParams.append('version', options.version.toString());
-    }
-    if (options?.includeLabels) {
-      searchParams.append('include-labels', 'true');
-    }
-    if (options?.includeProperties) {
-      searchParams.append('include-properties', 'true');
-    }
-    if (options?.includeOperations) {
-      searchParams.append('include-operations', 'true');
-    }
-    if (options?.includeLikes) {
-      searchParams.append('include-likes', 'true');
-    }
-    if (options?.includeVersions) {
-      searchParams.append('include-versions', 'true');
-    }
-    if (options?.includeVersion !== undefined) {
-      searchParams.append('include-version', options.includeVersion.toString());
-    }
-    if (options?.includeFavoritedByCurrentUserStatus) {
-      searchParams.append('include-favorited-by-current-user-status', 'true');
-    }
-    if (options?.includeWebresources) {
-      searchParams.append('include-webresources', 'true');
-    }
-    if (options?.includeCollaborators) {
-      searchParams.append('include-collaborators', 'true');
+    if (isDataCenter) {
+      // DataCenter版では expand パラメータを使用
+      let expandParams = ['version'];
+      if (options?.bodyFormat === 'storage' || options?.bodyFormat === 'view') {
+        expandParams.push('body.storage');
+      }
+      if (options?.includeLabels) {
+        expandParams.push('metadata.labels');
+      }
+      if (options?.includeProperties) {
+        expandParams.push('metadata.properties');
+      }
+      if (expandParams.length > 0) {
+        searchParams.append('expand', expandParams.join(','));
+      }
+    } else {
+      // Cloud版のパラメータ
+      if (options?.bodyFormat) {
+        searchParams.append('body-format', options.bodyFormat);
+      }
+      if (options?.getDraft) {
+        searchParams.append('get-draft', 'true');
+      }
+      if (options?.status) {
+        options.status.forEach(status => searchParams.append('status', status));
+      }
+      if (options?.version) {
+        searchParams.append('version', options.version.toString());
+      }
+      if (options?.includeLabels) {
+        searchParams.append('include-labels', 'true');
+      }
+      if (options?.includeProperties) {
+        searchParams.append('include-properties', 'true');
+      }
+      if (options?.includeOperations) {
+        searchParams.append('include-operations', 'true');
+      }
+      if (options?.includeLikes) {
+        searchParams.append('include-likes', 'true');
+      }
+      if (options?.includeVersions) {
+        searchParams.append('include-versions', 'true');
+      }
+      if (options?.includeVersion !== undefined) {
+        searchParams.append('include-version', options.includeVersion.toString());
+      }
+      if (options?.includeFavoritedByCurrentUserStatus) {
+        searchParams.append('include-favorited-by-current-user-status', 'true');
+      }
+      if (options?.includeWebresources) {
+        searchParams.append('include-webresources', 'true');
+      }
+      if (options?.includeCollaborators) {
+        searchParams.append('include-collaborators', 'true');
+      }
     }
 
-    const response = await this.client.get(`/pages/${id}?${searchParams}`);
+    const endpoint = isDataCenter ? `/content/${id}` : `/pages/${id}`;
+    
+    const response = await this.client.get(`${endpoint}?${searchParams}`);
+    
     return response.data;
   }
 
   async createPage(pageData: PageCreateRequest, options?: { private?: boolean }): Promise<Page> {
-    const searchParams = new URLSearchParams();
-    if (options?.private) {
-      searchParams.append('private', 'true');
-    }
+    const isDataCenter = this.config.authType === 'basic';
+    
+    if (isDataCenter) {
+      // DataCenter版では /content エンドポイントを使用し、異なるパラメータ構造
+      const dcPageData = {
+        type: 'page',
+        title: pageData.title,
+        space: {
+          key: pageData.spaceId  // DataCenter版ではkeyを使用
+        },
+        body: {
+          storage: pageData.body.storage
+        },
+        ...(pageData.parentId && { ancestors: [{ id: pageData.parentId }] })
+      };
 
-    const response = await this.client.post(`/pages?${searchParams}`, pageData);
-    return response.data;
+      const response = await this.client.post('/content', dcPageData);
+      return response.data;
+    } else {
+      // Cloud版の処理
+      const searchParams = new URLSearchParams();
+      if (options?.private) {
+        searchParams.append('private', 'true');
+      }
+
+      const response = await this.client.post(`/pages?${searchParams}`, pageData);
+      return response.data;
+    }
   }
 
   async updatePage(pageData: PageUpdateRequest): Promise<Page> {
-    const response = await this.client.put(`/pages/${pageData.id}`, pageData);
-    return response.data;
+    const isDataCenter = this.config.authType === 'basic';
+    
+    if (isDataCenter) {
+      // DataCenter版: /rest/api/content/{id} を使用
+      const updateData = {
+        title: pageData.title,
+        type: 'page',
+        body: pageData.body,
+        version: pageData.version
+      };
+      const response = await this.client.put(`/content/${pageData.id}`, updateData);
+      return response.data;
+    } else {
+      // Cloud版: /pages/{id} を使用
+      const response = await this.client.put(`/pages/${pageData.id}`, pageData);
+      return response.data;
+    }
   }
 
   async deletePage(id: number, options?: { purge?: boolean; draft?: boolean }): Promise<void> {
-    const searchParams = new URLSearchParams();
-    if (options?.purge) {
-      searchParams.append('purge', 'true');
+    const isDataCenter = this.config.authType === 'basic';
+    
+    if (isDataCenter) {
+      // DataCenter版: /rest/api/content/{id} を使用
+      const searchParams = new URLSearchParams();
+      if (options?.purge) {
+        searchParams.append('status', 'trashed'); // DataCenterではstatusパラメータ
+      }
+      
+      await this.client.delete(`/content/${id}?${searchParams}`);
+    } else {
+      // Cloud版: /pages/{id} を使用
+      const searchParams = new URLSearchParams();
+      if (options?.purge) {
+        searchParams.append('purge', 'true');
+      }
+      if (options?.draft) {
+        searchParams.append('draft', 'true');
+      }
+      
+      await this.client.delete(`/pages/${id}?${searchParams}`);
     }
-    if (options?.draft) {
-      searchParams.append('draft', 'true');
-    }
-
-    await this.client.delete(`/pages/${id}?${searchParams}`);
   }
 
   // Blog Post operations
@@ -364,40 +443,71 @@ export class ConfluenceApiClient {
     limit?: number;
   }): Promise<MultiEntityResult<Space>> {
     const searchParams = new URLSearchParams();
+    const isDataCenter = this.config.authType === 'basic';
     
-    if (params?.id) {
-      searchParams.append('ids', params.id.join(','));
-    }
-    if (params?.key) {
-      searchParams.append('keys', params.key.join(','));
-    }
-    if (params?.type) {
-      params.type.forEach(type => searchParams.append('type', type));
-    }
-    if (params?.status) {
-      params.status.forEach(status => searchParams.append('status', status));
-    }
-    if (params?.label) {
-      params.label.forEach(label => searchParams.append('label', label));
-    }
-    if (params?.favorite) {
-      searchParams.append('favorite', 'true');
-    }
-    if (params?.sort) {
-      searchParams.append('sort', params.sort);
-    }
-    if (params?.cursor) {
-      searchParams.append('cursor', params.cursor);
-    }
-    if (params?.limit) {
-      searchParams.append('limit', params.limit.toString());
+    if (isDataCenter) {
+      // DataCenter版では異なるパラメータ名を使用
+      if (params?.key) {
+        searchParams.append('spaceKey', params.key.join(','));
+      }
+      if (params?.type) {
+        params.type.forEach(type => searchParams.append('type', type));
+      }
+      if (params?.status) {
+        params.status.forEach(status => searchParams.append('status', status));
+      }
+      if (params?.limit) {
+        searchParams.append('limit', params.limit.toString());
+      }
+      searchParams.append('expand', 'description.plain,homepage');
+    } else {
+      // Cloud版のパラメータ
+      if (params?.id) {
+        searchParams.append('ids', params.id.join(','));
+      }
+      if (params?.key) {
+        searchParams.append('keys', params.key.join(','));
+      }
+      if (params?.type) {
+        params.type.forEach(type => searchParams.append('type', type));
+      }
+      if (params?.status) {
+        params.status.forEach(status => searchParams.append('status', status));
+      }
+      if (params?.label) {
+        params.label.forEach(label => searchParams.append('label', label));
+      }
+      if (params?.favorite) {
+        searchParams.append('favorite', 'true');
+      }
+      if (params?.sort) {
+        searchParams.append('sort', params.sort);
+      }
+      if (params?.cursor) {
+        searchParams.append('cursor', params.cursor);
+      }
+      if (params?.limit) {
+        searchParams.append('limit', params.limit.toString());
+      }
     }
 
-    const response = await this.client.get(`/spaces?${searchParams}`);
+    const endpoint = isDataCenter ? '/space' : '/spaces';
+    
+    const response = await this.client.get(`${endpoint}?${searchParams}`);
+    
+    // DataCenter版のレスポンス形式を統一
+    if (isDataCenter) {
+      // DataCenter版では直接results配列を返す
+      return {
+        results: response.data.results || [],
+        _links: response.data._links || {}
+      };
+    }
+    
     return response.data;
   }
 
-  async getSpaceById(id: number, options?: {
+  async getSpaceById(id: number | string, options?: {
     includeIcon?: boolean;
     includeDescription?: boolean;
     includeHomepage?: boolean;
@@ -407,31 +517,52 @@ export class ConfluenceApiClient {
     includeLabels?: boolean;
   }): Promise<Space> {
     const searchParams = new URLSearchParams();
+    const isDataCenter = this.config.authType === 'basic';
     
-    if (options?.includeIcon) {
-      searchParams.append('include-icon', 'true');
-    }
-    if (options?.includeDescription) {
-      searchParams.append('include-description', 'true');
-    }
-    if (options?.includeHomepage) {
-      searchParams.append('include-homepage', 'true');
-    }
-    if (options?.includeOperations) {
-      searchParams.append('include-operations', 'true');
-    }
-    if (options?.includePermissions) {
-      searchParams.append('include-permissions', 'true');
-    }
-    if (options?.includeProperties) {
-      searchParams.append('include-properties', 'true');
-    }
-    if (options?.includeLabels) {
-      searchParams.append('include-labels', 'true');
-    }
+    if (isDataCenter) {
+      // DataCenter版では expand パラメータを使用
+      let expandParams = [];
+      if (options?.includeDescription) {
+        expandParams.push('description.plain');
+      }
+      if (options?.includeHomepage) {
+        expandParams.push('homepage');
+      }
+      if (expandParams.length > 0) {
+        searchParams.append('expand', expandParams.join(','));
+      }
+      
+      // DataCenter版では spaceKey でもアクセス可能
+      const endpoint = `/space/${id}`;
+      const response = await this.client.get(`${endpoint}?${searchParams}`);
+      return response.data;
+    } else {
+      // Cloud版のパラメータ
+      if (options?.includeIcon) {
+        searchParams.append('include-icon', 'true');
+      }
+      if (options?.includeDescription) {
+        searchParams.append('include-description', 'true');
+      }
+      if (options?.includeHomepage) {
+        searchParams.append('include-homepage', 'true');
+      }
+      if (options?.includeOperations) {
+        searchParams.append('include-operations', 'true');
+      }
+      if (options?.includePermissions) {
+        searchParams.append('include-permissions', 'true');
+      }
+      if (options?.includeProperties) {
+        searchParams.append('include-properties', 'true');
+      }
+      if (options?.includeLabels) {
+        searchParams.append('include-labels', 'true');
+      }
 
-    const response = await this.client.get(`/spaces/${id}?${searchParams}`);
-    return response.data;
+      const response = await this.client.get(`/spaces/${id}?${searchParams}`);
+      return response.data;
+    }
   }
 
   async createSpace(spaceData: SpaceCreateRequest): Promise<Space> {
@@ -554,13 +685,35 @@ export class ConfluenceApiClient {
 
   // User operations
   async getCurrentUser(): Promise<User> {
-    const response = await this.client.get('/user');
-    return response.data;
+    const isDataCenter = this.config.authType === 'basic';
+    
+    if (isDataCenter) {
+      // DataCenter版では /user/current エンドポイントを使用
+      const response = await this.client.get('/user/current');
+      return {
+        accountId: response.data.userKey || response.data.username,
+        displayName: response.data.displayName,
+        email: response.data.email || undefined
+      };
+    } else {
+      // Cloud版
+      const response = await this.client.get('/user');
+      return response.data;
+    }
   }
 
   async getUserById(accountId: string): Promise<User> {
-    const response = await this.client.get(`/users/${accountId}`);
-    return response.data;
+    const isDataCenter = this.config.authType === 'basic';
+    
+    if (isDataCenter) {
+      // DataCenter版では /user エンドポイントを使用
+      const response = await this.client.get(`/user?key=${accountId}`);
+      return response.data;
+    } else {
+      // Cloud版
+      const response = await this.client.get(`/users/${accountId}`);
+      return response.data;
+    }
   }
 
   async getUsers(params?: {
@@ -569,19 +722,32 @@ export class ConfluenceApiClient {
     limit?: number;
   }): Promise<MultiEntityResult<User>> {
     const searchParams = new URLSearchParams();
+    const isDataCenter = this.config.authType === 'basic';
     
-    if (params?.accountId) {
-      searchParams.append('accountId', params.accountId.join(','));
+    if (isDataCenter) {
+      // DataCenter版では異なるパラメータを使用
+      if (params?.limit) {
+        searchParams.append('limit', params.limit.toString());
+      }
+      const response = await this.client.get(`/user/search?${searchParams}`);
+      return {
+        results: Array.isArray(response.data) ? response.data : [response.data],
+        _links: {}
+      };
+    } else {
+      // Cloud版
+      if (params?.accountId) {
+        searchParams.append('accountId', params.accountId.join(','));
+      }
+      if (params?.cursor) {
+        searchParams.append('cursor', params.cursor);
+      }
+      if (params?.limit) {
+        searchParams.append('limit', params.limit.toString());
+      }
+      const response = await this.client.get(`/users?${searchParams}`);
+      return response.data;
     }
-    if (params?.cursor) {
-      searchParams.append('cursor', params.cursor);
-    }
-    if (params?.limit) {
-      searchParams.append('limit', params.limit.toString());
-    }
-
-    const response = await this.client.get(`/users?${searchParams}`);
-    return response.data;
   }
 
   // Content properties operations
@@ -659,5 +825,80 @@ export class ConfluenceApiClient {
 
   async disableAdminKey(): Promise<void> {
     await this.client.delete('/admin-key');
+  }
+
+  // Content Search API (CQL)
+  async searchContent(params: {
+    cql: string;
+    expand?: string;
+    limit?: number;
+    start?: number;
+  }): Promise<MultiEntityResult<any>> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('cql', params.cql);
+    
+    if (params.expand) {
+      searchParams.append('expand', params.expand);
+    }
+    if (params.limit) {
+      searchParams.append('limit', params.limit.toString());
+    }
+    if (params.start) {
+      searchParams.append('start', params.start.toString());
+    }
+
+    const response = await this.client.get(`/content/search?${searchParams}`);
+    return response.data;
+  }
+
+  // Content Labels API  
+  async getContentLabels(contentId: string | number): Promise<MultiEntityResult<Label>> {
+    const response = await this.client.get(`/content/${contentId}/label`);
+    return response.data;
+  }
+
+  async addContentLabel(contentId: string | number, name: string): Promise<Label> {
+    const response = await this.client.post(`/content/${contentId}/label`, {
+      name: name
+    });
+    return response.data;
+  }
+
+  // User Search API
+  async searchUsers(params?: {
+    query?: string;
+    limit?: number;
+    start?: number;
+  }): Promise<MultiEntityResult<User>> {
+    const searchParams = new URLSearchParams();
+    const isDataCenter = this.config.authType === 'basic';
+    
+    if (isDataCenter) {
+      // DataCenter版では /user エンドポイントを使用
+      if (params?.query) {
+        searchParams.append('username', params.query);
+      }
+      if (params?.limit) {
+        searchParams.append('limit', params.limit.toString());
+      }
+      if (params?.start) {
+        searchParams.append('start', params.start.toString());
+      }
+      const response = await this.client.get(`/user?${searchParams}`);
+      return {
+        results: Array.isArray(response.data) ? response.data : [response.data],
+        _links: {}
+      };
+    } else {
+      // Cloud版
+      if (params?.limit) {
+        searchParams.append('limit', params.limit.toString());
+      }
+      if (params?.start) {
+        searchParams.append('cursor', params.start.toString());
+      }
+      const response = await this.client.get(`/users?${searchParams}`);
+      return response.data;
+    }
   }
 }

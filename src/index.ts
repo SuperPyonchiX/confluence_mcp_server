@@ -43,9 +43,9 @@ class ConfluenceMCPServer {
 
   private getClient(): ConfluenceApiClient {
     if (!this.confluenceClient) {
-      const domain = process.env.CONFLUENCE_DOMAIN;
-      const baseUrl = process.env.CONFLUENCE_BASE_URL;
-      const authType = (process.env.CONFLUENCE_AUTH_TYPE as 'basic' | 'token') || 'token';
+      const domain = process.env.CONFLUENCE_DOMAIN?.trim();
+      const baseUrl = process.env.CONFLUENCE_BASE_URL?.trim();
+      const authType = (process.env.CONFLUENCE_AUTH_TYPE?.trim() as 'basic' | 'token') || 'token';
 
       if (!domain) {
         throw new Error('Missing required environment variable: CONFLUENCE_DOMAIN');
@@ -55,8 +55,8 @@ class ConfluenceMCPServer {
 
       if (authType === 'basic') {
         // DataCenter版の場合：ユーザー名とパスワード
-        const username = process.env.CONFLUENCE_USERNAME;
-        const password = process.env.CONFLUENCE_PASSWORD;
+        const username = process.env.CONFLUENCE_USERNAME?.trim();
+        const password = process.env.CONFLUENCE_PASSWORD?.trim();
 
         if (!username || !password) {
           throw new Error(
@@ -68,13 +68,13 @@ class ConfluenceMCPServer {
           domain,
           username,
           password,
-          baseUrl: baseUrl || `https://${domain}/rest/api/2`,
+          baseUrl: baseUrl || `http://${domain}/rest/api`,
           authType: 'basic'
         };
       } else {
         // Cloud版の場合：メールとAPIトークン
-        const email = process.env.CONFLUENCE_EMAIL;
-        const apiToken = process.env.CONFLUENCE_API_TOKEN;
+        const email = process.env.CONFLUENCE_EMAIL?.trim();
+        const apiToken = process.env.CONFLUENCE_API_TOKEN?.trim();
 
         if (!email || !apiToken) {
           throw new Error(
@@ -163,7 +163,7 @@ class ConfluenceMCPServer {
           type: 'object',
           properties: {
             id: {
-              type: 'number',
+              type: ['string', 'number'],
               description: 'The ID of the page to retrieve'
             },
             bodyFormat: {
@@ -322,204 +322,6 @@ class ConfluenceMCPServer {
         }
       },
 
-      // Blog Post tools
-      {
-        name: 'confluence_get_blog_posts',
-        description: 'Get all blog posts with optional filtering',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'array',
-              items: { type: 'number' },
-              description: 'Filter by blog post IDs'
-            },
-            spaceId: {
-              type: 'array',
-              items: { type: 'number' },
-              description: 'Filter by space IDs'
-            },
-            status: {
-              type: 'array',
-              items: { type: 'string', enum: ['current', 'deleted', 'trashed'] },
-              description: 'Filter by blog post status'
-            },
-            title: {
-              type: 'string',
-              description: 'Filter by blog post title'
-            },
-            bodyFormat: {
-              type: 'string',
-              enum: ['storage', 'atlas_doc_format', 'view'],
-              description: 'Content format to return in body field'
-            },
-            sort: {
-              type: 'string',
-              description: 'Sort order'
-            },
-            limit: {
-              type: 'number',
-              minimum: 1,
-              maximum: 250,
-              default: 25,
-              description: 'Maximum number of results to return'
-            }
-          }
-        }
-      },
-      {
-        name: 'confluence_get_blog_post_by_id',
-        description: 'Get a specific blog post by its ID',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'number',
-              description: 'The ID of the blog post to retrieve'
-            },
-            bodyFormat: {
-              type: 'string',
-              enum: ['storage', 'atlas_doc_format', 'view'],
-              description: 'Content format to return in body field'
-            },
-            getDraft: {
-              type: 'boolean',
-              description: 'Retrieve the draft version'
-            },
-            version: {
-              type: 'number',
-              description: 'Retrieve a specific version number'
-            },
-            includeLabels: {
-              type: 'boolean',
-              description: 'Include labels'
-            },
-            includeProperties: {
-              type: 'boolean',
-              description: 'Include content properties'
-            },
-            includeOperations: {
-              type: 'boolean',
-              description: 'Include permitted operations'
-            },
-            includeLikes: {
-              type: 'boolean',
-              description: 'Include likes information'
-            }
-          },
-          required: ['id']
-        }
-      },
-      {
-        name: 'confluence_create_blog_post',
-        description: 'Create a new blog post in a space',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            spaceId: {
-              type: 'number',
-              description: 'The ID of the space to create the blog post in'
-            },
-            title: {
-              type: 'string',
-              description: 'The title of the blog post'
-            },
-            body: {
-              type: 'object',
-              properties: {
-                storage: {
-                  type: 'object',
-                  properties: {
-                    value: { type: 'string' },
-                    representation: { type: 'string', enum: ['storage'] }
-                  },
-                  required: ['value', 'representation']
-                }
-              },
-              description: 'The body content of the blog post'
-            },
-            status: {
-              type: 'string',
-              enum: ['current', 'draft'],
-              default: 'current',
-              description: 'The status of the blog post'
-            },
-            private: {
-              type: 'boolean',
-              description: 'Whether the blog post should be private'
-            }
-          },
-          required: ['spaceId', 'title', 'body']
-        }
-      },
-      {
-        name: 'confluence_update_blog_post',
-        description: 'Update an existing blog post',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'number',
-              description: 'The ID of the blog post to update'
-            },
-            title: {
-              type: 'string',
-              description: 'The new title of the blog post'
-            },
-            body: {
-              type: 'object',
-              properties: {
-                storage: {
-                  type: 'object',
-                  properties: {
-                    value: { type: 'string' },
-                    representation: { type: 'string', enum: ['storage'] }
-                  },
-                  required: ['value', 'representation']
-                }
-              },
-              description: 'The new body content of the blog post'
-            },
-            version: {
-              type: 'object',
-              properties: {
-                number: { type: 'number' },
-                message: { type: 'string' }
-              },
-              required: ['number'],
-              description: 'Version information for the update'
-            },
-            status: {
-              type: 'string',
-              enum: ['current', 'draft'],
-              description: 'The status of the blog post'
-            }
-          },
-          required: ['id', 'version']
-        }
-      },
-      {
-        name: 'confluence_delete_blog_post',
-        description: 'Delete a blog post',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'number',
-              description: 'The ID of the blog post to delete'
-            },
-            purge: {
-              type: 'boolean',
-              description: 'Permanently delete the blog post'
-            },
-            draft: {
-              type: 'boolean',
-              description: 'Delete a draft blog post'
-            }
-          },
-          required: ['id']
-        }
-      },
 
       // Space tools
       {
@@ -573,8 +375,8 @@ class ConfluenceMCPServer {
           type: 'object',
           properties: {
             id: {
-              type: 'number',
-              description: 'The ID of the space to retrieve'
+              type: ['number', 'string'],
+              description: 'The ID or key of the space to retrieve'
             },
             includeIcon: {
               type: 'boolean',
@@ -608,171 +410,72 @@ class ConfluenceMCPServer {
           required: ['id']
         }
       },
+      
+      // Content Search API (CQL)
       {
-        name: 'confluence_create_space',
-        description: 'Create a new space',
+        name: 'confluence_search_content',
+        description: 'Search for content using CQL (Confluence Query Language)',
         inputSchema: {
           type: 'object',
           properties: {
-            key: {
+            cql: {
               type: 'string',
-              description: 'The key for the space (must be unique)'
+              description: 'CQL query string (e.g., "space=TEST AND type=page", "title~cheese")'
             },
-            name: {
+            expand: {
               type: 'string',
-              description: 'The name of the space'
-            },
-            description: {
-              type: 'object',
-              properties: {
-                plain: {
-                  type: 'object',
-                  properties: {
-                    value: { type: 'string' }
-                  },
-                  required: ['value']
-                }
-              },
-              description: 'The description of the space'
-            }
-          },
-          required: ['key', 'name']
-        }
-      },
-      {
-        name: 'confluence_update_space',
-        description: 'Update an existing space',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'number',
-              description: 'The ID of the space to update'
-            },
-            key: {
-              type: 'string',
-              description: 'The new key for the space'
-            },
-            name: {
-              type: 'string',
-              description: 'The new name of the space'
-            },
-            description: {
-              type: 'object',
-              properties: {
-                plain: {
-                  type: 'object',
-                  properties: {
-                    value: { type: 'string' }
-                  },
-                  required: ['value']
-                }
-              },
-              description: 'The new description of the space'
-            }
-          },
-          required: ['id']
-        }
-      },
-      {
-        name: 'confluence_delete_space',
-        description: 'Delete a space',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'number',
-              description: 'The ID of the space to delete'
-            }
-          },
-          required: ['id']
-        }
-      },
-
-      // Attachment tools
-      {
-        name: 'confluence_get_attachments',
-        description: 'Get all attachments with optional filtering',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            status: {
-              type: 'array',
-              items: { type: 'string', enum: ['current', 'archived', 'trashed'] },
-              description: 'Filter by attachment status'
-            },
-            mediaType: {
-              type: 'string',
-              description: 'Filter by media type'
-            },
-            filename: {
-              type: 'string',
-              description: 'Filter by filename'
-            },
-            sort: {
-              type: 'string',
-              description: 'Sort order'
+              description: 'Properties to expand (e.g., "space,body.view,version")',
+              default: 'space,version'
             },
             limit: {
               type: 'number',
               minimum: 1,
-              maximum: 250,
-              default: 50,
+              maximum: 100,
+              default: 25,
               description: 'Maximum number of results to return'
+            },
+            start: {
+              type: 'number',
+              minimum: 0,
+              default: 0,
+              description: 'Starting index for pagination'
             }
-          }
+          },
+          required: ['cql']
         }
       },
+
+      // Content Labels API
       {
-        name: 'confluence_get_attachment_by_id',
-        description: 'Get a specific attachment by its ID',
+        name: 'confluence_get_content_labels',
+        description: 'Get all labels for a piece of content',
         inputSchema: {
           type: 'object',
           properties: {
             id: {
+              type: ['string', 'number'],
+              description: 'The ID of the content'
+            }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'confluence_add_content_label',
+        description: 'Add a label to a piece of content',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: ['string', 'number'],
+              description: 'The ID of the content'
+            },
+            name: {
               type: 'string',
-              description: 'The ID of the attachment to retrieve'
-            },
-            version: {
-              type: 'number',
-              description: 'Retrieve a specific version'
-            },
-            includeLabels: {
-              type: 'boolean',
-              description: 'Include labels'
-            },
-            includeProperties: {
-              type: 'boolean',
-              description: 'Include content properties'
-            },
-            includeOperations: {
-              type: 'boolean',
-              description: 'Include permitted operations'
-            },
-            includeVersions: {
-              type: 'boolean',
-              description: 'Include version history'
+              description: 'The name of the label to add'
             }
           },
-          required: ['id']
-        }
-      },
-      {
-        name: 'confluence_delete_attachment',
-        description: 'Delete an attachment',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'number',
-              description: 'The ID of the attachment to delete'
-            },
-            purge: {
-              type: 'boolean',
-              description: 'Permanently delete the attachment'
-            }
-          },
-          required: ['id']
+          required: ['id', 'name']
         }
       },
 
@@ -801,159 +504,31 @@ class ConfluenceMCPServer {
       },
       {
         name: 'confluence_get_users',
-        description: 'Get multiple users',
+        description: 'Get users with optional filtering',
         inputSchema: {
           type: 'object',
           properties: {
-            accountId: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Filter by account IDs'
+            query: {
+              type: 'string',
+              description: 'Query string to filter users by username or display name'
             },
             limit: {
               type: 'number',
               minimum: 1,
-              maximum: 250,
-              default: 25,
-              description: 'Maximum number of results to return'
+              maximum: 200,
+              default: 50,
+              description: 'Maximum number of users to return'
+            },
+            start: {
+              type: 'number',
+              minimum: 0,
+              default: 0,
+              description: 'Starting index for pagination'
             }
           }
         }
       },
 
-      // Label tools
-      {
-        name: 'confluence_get_labels',
-        description: 'Get all labels with optional filtering',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            prefix: {
-              type: 'string',
-              enum: ['my', 'team', 'global', 'system'],
-              description: 'Filter by label prefix'
-            },
-            sort: {
-              type: 'string',
-              description: 'Sort order'
-            },
-            limit: {
-              type: 'number',
-              minimum: 1,
-              maximum: 250,
-              default: 25,
-              description: 'Maximum number of results to return'
-            }
-          }
-        }
-      },
-      {
-        name: 'confluence_get_label_by_id',
-        description: 'Get a specific label by its ID',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'number',
-              description: 'The ID of the label to retrieve'
-            }
-          },
-          required: ['id']
-        }
-      },
-
-      // Content Properties tools
-      {
-        name: 'confluence_get_content_properties',
-        description: 'Get content properties for a page, blog post, or attachment',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            contentId: {
-              type: 'number',
-              description: 'The ID of the content'
-            },
-            contentType: {
-              type: 'string',
-              enum: ['page', 'blogpost', 'attachment'],
-              description: 'The type of content'
-            },
-            key: {
-              type: 'string',
-              description: 'Filter by property key'
-            },
-            sort: {
-              type: 'string',
-              description: 'Sort order'
-            },
-            limit: {
-              type: 'number',
-              minimum: 1,
-              maximum: 250,
-              default: 25,
-              description: 'Maximum number of results to return'
-            }
-          },
-          required: ['contentId', 'contentType']
-        }
-      },
-      {
-        name: 'confluence_create_content_property',
-        description: 'Create a content property for a page, blog post, or attachment',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            contentId: {
-              type: 'number',
-              description: 'The ID of the content'
-            },
-            contentType: {
-              type: 'string',
-              enum: ['page', 'blogpost', 'attachment'],
-              description: 'The type of content'
-            },
-            key: {
-              type: 'string',
-              description: 'The key for the property'
-            },
-            value: {
-              description: 'The value for the property (can be any type)'
-            }
-          },
-          required: ['contentId', 'contentType', 'key', 'value']
-        }
-      },
-
-      // Admin Key tools
-      {
-        name: 'confluence_get_admin_key',
-        description: 'Get current admin key information',
-        inputSchema: {
-          type: 'object',
-          properties: {}
-        }
-      },
-      {
-        name: 'confluence_enable_admin_key',
-        description: 'Enable admin key access',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            durationInMinutes: {
-              type: 'number',
-              description: 'Duration in minutes for the admin key (default: 10)'
-            }
-          }
-        }
-      },
-      {
-        name: 'confluence_disable_admin_key',
-        description: 'Disable admin key access',
-        inputSchema: {
-          type: 'object',
-          properties: {}
-        }
-      },
 
       // Markdown conversion tools
       {
@@ -1032,6 +607,7 @@ class ConfluenceMCPServer {
           required: ['pageId', 'filePath']
         }
       },
+
       {
         name: 'confluence_export_space_to_markdown',
         description: 'Export all pages in a space to Markdown files',
@@ -1070,130 +646,88 @@ class ConfluenceMCPServer {
       switch (name) {
         // Page operations
         case 'confluence_get_pages':
-          return await client.getPages(args as any);
+          const pagesResult = await client.getPages(args as any);
+          return { content: [{ type: "text", text: JSON.stringify(pagesResult, null, 2) }] };
 
         case 'confluence_get_page_by_id':
-          return await client.getPageById(args.id as number, args as any);
+          const pageResult = await client.getPageById(args.id as string | number, args as any);
+          return { content: [{ type: "text", text: JSON.stringify(pageResult, null, 2) }] };
 
         case 'confluence_create_page':
-          return await client.createPage(args as any, { private: args.private as boolean });
+          const createdPage = await client.createPage(args as any, { private: args.private as boolean });
+          return { content: [{ type: "text", text: JSON.stringify(createdPage, null, 2) }] };
 
         case 'confluence_update_page':
-          return await client.updatePage(args as any);
+          const updatedPage = await client.updatePage(args as any);
+          return { content: [{ type: "text", text: JSON.stringify(updatedPage, null, 2) }] };
 
         case 'confluence_delete_page':
           await client.deletePage(args.id as number, { 
             purge: args.purge as boolean, 
             draft: args.draft as boolean 
           });
-          return { success: true, message: 'Page deleted successfully' };
+          return { content: [{ type: "text", text: "Page deleted successfully" }] };
 
-        // Blog post operations
-        case 'confluence_get_blog_posts':
-          return await client.getBlogPosts(args as any);
+        // Content search
+        case 'confluence_search_content':
+          const searchResult = await this.handleSearchContent(client, args);
+          return { content: [{ type: "text", text: JSON.stringify(searchResult, null, 2) }] };
 
-        case 'confluence_get_blog_post_by_id':
-          return await client.getBlogPostById(args.id as number, args as any);
+        // Content labels
+        case 'confluence_get_content_labels':
+          const labelsResult = await this.handleGetContentLabels(client, args);
+          return { content: [{ type: "text", text: JSON.stringify(labelsResult, null, 2) }] };
 
-        case 'confluence_create_blog_post':
-          return await client.createBlogPost(args as any, { private: args.private as boolean });
+        case 'confluence_add_content_label':
+          const addLabelResult = await this.handleAddContentLabel(client, args);
+          return { content: [{ type: "text", text: JSON.stringify(addLabelResult, null, 2) }] };
 
-        case 'confluence_update_blog_post':
-          return await client.updateBlogPost(args as any);
 
-        case 'confluence_delete_blog_post':
-          await client.deleteBlogPost(args.id as number, { 
-            purge: args.purge as boolean, 
-            draft: args.draft as boolean 
-          });
-          return { success: true, message: 'Blog post deleted successfully' };
 
         // Space operations
         case 'confluence_get_spaces':
-          return await client.getSpaces(args as any);
+          const spacesResult = await client.getSpaces(args as any);
+          return { content: [{ type: "text", text: JSON.stringify(spacesResult, null, 2) }] };
 
         case 'confluence_get_space_by_id':
-          return await client.getSpaceById(args.id as number, args as any);
+          const spaceResult = await client.getSpaceById(args.id as number, args as any);
+          return { content: [{ type: "text", text: JSON.stringify(spaceResult, null, 2) }] };
 
-        case 'confluence_create_space':
-          return await client.createSpace(args as any);
 
-        case 'confluence_update_space':
-          return await client.updateSpace(args.id as number, args as any);
-
-        case 'confluence_delete_space':
-          await client.deleteSpace(args.id as number);
-          return { success: true, message: 'Space deleted successfully' };
-
-        // Attachment operations
-        case 'confluence_get_attachments':
-          return await client.getAttachments(args as any);
-
-        case 'confluence_get_attachment_by_id':
-          return await client.getAttachmentById(args.id as string, args as any);
-
-        case 'confluence_delete_attachment':
-          await client.deleteAttachment(args.id as number, { purge: args.purge as boolean });
-          return { success: true, message: 'Attachment deleted successfully' };
 
         // User operations
         case 'confluence_get_current_user':
-          return await client.getCurrentUser();
+          const userResult = await client.getCurrentUser();
+          return { content: [{ type: "text", text: JSON.stringify(userResult, null, 2) }] };
 
         case 'confluence_get_user_by_id':
-          return await client.getUserById(args.accountId as string);
+          const userByIdResult = await client.getUserById(args.accountId as string);
+          return { content: [{ type: "text", text: JSON.stringify(userByIdResult, null, 2) }] };
 
         case 'confluence_get_users':
-          return await client.getUsers(args as any);
+          const usersResult = await this.handleGetUsers(client, args);
+          return { content: [{ type: "text", text: JSON.stringify(usersResult, null, 2) }] };
 
-        // Label operations
-        case 'confluence_get_labels':
-          return await client.getLabels(args as any);
 
-        case 'confluence_get_label_by_id':
-          return await client.getLabelById(args.id as number);
-
-        // Content properties operations
-        case 'confluence_get_content_properties':
-          return await client.getContentProperties(
-            args.contentId as number, 
-            args.contentType as any, 
-            args as any
-          );
-
-        case 'confluence_create_content_property':
-          return await client.createContentProperty(
-            args.contentId as number, 
-            args.contentType as any, 
-            {
-              key: args.key as string,
-              value: args.value
-            }
-          );
-
-        // Admin key operations
-        case 'confluence_get_admin_key':
-          return await client.getAdminKey();
-
-        case 'confluence_enable_admin_key':
-          return await client.enableAdminKey(args.durationInMinutes as number);
-
-        case 'confluence_disable_admin_key':
-          await client.disableAdminKey();
-          return { success: true, message: 'Admin key disabled successfully' };
 
         // Markdown conversion operations
         case 'confluence_page_to_markdown':
-          return await this.handlePageToMarkdown(client, args);
+          const pageToMdResult = await this.handlePageToMarkdown(client, args);
+          return { content: [{ type: "text", text: JSON.stringify(pageToMdResult, null, 2) }] };
 
         case 'confluence_markdown_to_page':
-          return await this.handleMarkdownToPage(client, args);
+          const mdToPageResult = await this.handleMarkdownToPage(client, args);
+          return { content: [{ type: "text", text: JSON.stringify(mdToPageResult, null, 2) }] };
 
         case 'confluence_update_page_from_markdown':
-          return await this.handleUpdatePageFromMarkdown(client, args);
+          const updateFromMdResult = await this.handleUpdatePageFromMarkdown(client, args);
+          return { content: [{ type: "text", text: JSON.stringify(updateFromMdResult, null, 2) }] };
+
+
 
         case 'confluence_export_space_to_markdown':
-          return await this.handleExportSpaceToMarkdown(client, args);
+          const exportResult = await this.handleExportSpaceToMarkdown(client, args);
+          return { content: [{ type: "text", text: JSON.stringify(exportResult, null, 2) }] };
 
         default:
           throw new Error(`Unknown tool: ${name}`);
@@ -1274,6 +808,8 @@ class ConfluenceMCPServer {
     }
   }
 
+
+
   private async handleUpdatePageFromMarkdown(client: ConfluenceApiClient, args: any): Promise<any> {
     try {
       // 既存ページの情報を取得
@@ -1341,6 +877,74 @@ class ConfluenceMCPServer {
       };
     } catch (error: any) {
       throw new Error(`Failed to export space to Markdown: ${error.message}`);
+    }
+  }
+
+  private async handleSearchContent(client: ConfluenceApiClient, args: any): Promise<any> {
+    try {
+      const searchResult = await client.searchContent({
+        cql: args.cql,
+        expand: args.expand || 'space,version',
+        limit: args.limit || 25,
+        start: args.start || 0
+      });
+      
+      return {
+        success: true,
+        message: `Found ${searchResult.results?.length || 0} content items`,
+        results: searchResult.results,
+        _links: searchResult._links
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to search content: ${error.message}`);
+    }
+  }
+
+  private async handleGetContentLabels(client: ConfluenceApiClient, args: any): Promise<any> {
+    try {
+      const labelsResult = await client.getContentLabels(args.id);
+      
+      return {
+        success: true,
+        message: `Found ${labelsResult.results?.length || 0} labels`,
+        results: labelsResult.results,
+        _links: labelsResult._links
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to get content labels: ${error.message}`);
+    }
+  }
+
+  private async handleAddContentLabel(client: ConfluenceApiClient, args: any): Promise<any> {
+    try {
+      const addedLabel = await client.addContentLabel(args.id, args.name);
+      
+      return {
+        success: true,
+        message: 'Label added successfully',
+        label: addedLabel
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to add content label: ${error.message}`);
+    }
+  }
+
+  private async handleGetUsers(client: ConfluenceApiClient, args: any): Promise<any> {
+    try {
+      const usersResult = await client.searchUsers({
+        query: args.query,
+        limit: args.limit || 50,
+        start: args.start || 0
+      });
+      
+      return {
+        success: true,
+        message: `Found ${usersResult.results?.length || 0} users`,
+        results: usersResult.results,
+        _links: usersResult._links
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to get users: ${error.message}`);
     }
   }
 }

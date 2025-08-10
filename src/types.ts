@@ -58,22 +58,43 @@ export interface Space {
       value: string;
     };
   };
-  status: 'current' | 'archived';
+  status?: 'current' | 'archived';
   type: 'global' | 'personal';
   homepageId?: number;
+  creator?: any;
+  creationDate?: string;
+  lastModifier?: any;
+  lastModificationDate?: string;
+  _links?: {
+    self: string;
+    webui: string;
+  };
+  _expandable?: any;
 }
 
 export interface Page {
-  id: number;
-  status: 'current' | 'archived' | 'deleted' | 'trashed' | 'draft';
+  id: string | number;
+  type?: string;
+  status?: 'current' | 'archived' | 'deleted' | 'trashed' | 'draft';
   title: string;
-  spaceId: number;
+  space?: {
+    id: number;
+    key: string;
+    name: string;
+  };
+  spaceId?: number;
   parentId?: number;
-  authorId: string;
-  createdAt: string;
+  authorId?: string;
+  createdAt?: string;
   version: Version;
   body?: ContentBody;
   position?: number;
+  _links?: {
+    self: string;
+    webui: string;
+    tinyui: string;
+  };
+  _expandable?: any;
 }
 
 export interface BlogPost {
