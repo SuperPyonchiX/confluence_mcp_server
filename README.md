@@ -1,24 +1,35 @@
-# Confluence MCP Server（DataCenter版）
+# Confluence MCP Server（DataCenter版） + ローカルベクトル検索
 
 Confluence DataCenter/Server環境向けのModel Context Protocol（MCP）サーバーです。AIエージェントがConfluenceのスペース、ページ、ユーザー、検索機能と効率的にやり取りできるよう設計されています。
 
+**🆕 v3.0.0 新機能**: 完全オフライン動作のベクトル検索機能を追加しました！
+
 ## 📋 概要
 
-MCPサーバーは、Confluence DataCenter/Serverの**17の主要API**を提供し、以下の機能を実現します：
+MCPサーバーは、Confluence DataCenter/Serverの**17の主要API**と**ローカルベクトル検索機能**を提供し、以下の機能を実現します：
 
 - 📄 **ページ管理**: 作成・読取・更新・削除の完全なCRUD操作
 - 🔍 **高度な検索**: CQL（Confluence Query Language）による強力な検索機能
+- 🧠 **ローカルベクトル検索**: 外部API不要のセマンティック検索（**NEW!**）
 - 🏷️ **ラベル管理**: コンテンツの分類・整理機能
 - 👥 **ユーザー管理**: ユーザー検索・情報取得機能
 - 🏢 **スペース管理**: スペース情報の取得・管理
-- � **Markdown変換**: ConfluenceページとMarkdownの相互変換
+- 📝 **Markdown変換**: ConfluenceページとMarkdownの相互変換
+
+**🔒 企業環境対応**: 外部API不要、完全オフライン動作で企業のセキュリティ要件に対応
 
 ## 🎯 対応バージョン
 
 - ✅ **Confluence DataCenter/Server** - REST API v1 + Basic認証（ユーザー名・パスワード）
 - ❌ **Confluence Cloud** - このバージョンでは未対応
 
-## 📚 API一覧（全17API）
+## 📚 API一覧（全18API）
+
+### 🧠 ローカルベクトル検索API（1個）⭐**NEW!!**
+
+| API名 | 機能 | 使用場面 |
+|-------|------|----------|
+| `confluence_vector_search` | TF-IDFベクトルDBを使った意味検索 | 「概要について教えて」等の自然言語での検索 |
 
 ### 📄 ページ管理API（5個）
 
@@ -77,6 +88,43 @@ MCPサーバーは、Confluence DataCenter/Serverの**17の主要API**を提供�
 - **双方向変換**: Confluence ⇔ Markdown の相互変換
 - **一括エクスポート**: スペース全体を一括でMarkdown化
 - **メタデータ保持**: ページ情報を適切に保持
+
+## 🧠 ベクトル検索機能（NEW!）
+
+v3.0.0で追加されたベクトル検索機能により、自然言語での意味検索が可能になりました。
+
+### 📋 ワークフロー
+
+1. **ベクトルDB作成**（`tools/`ディレクトリ）
+   ```bash
+   cd tools
+   build-vectors.bat PROJ  # PROJスペースをベクトル化
+   ```
+
+2. **検索実行**（MCPサーバー）
+   ```json
+   {
+     "name": "confluence_vector_search",
+     "arguments": {
+       "query": "プロジェクトの概要について教えて",
+       "vectorDbPath": "./vectors/PROJ-vectors.json"
+     }
+   }
+   ```
+
+### 🛠️ ベクトルDBビルダー
+
+`tools/`ディレクトリには、Confluenceスペースをベクトル化するためのツールが含まれています：
+
+- **vector-builder.ts**: メインのベクトル化ツール
+- **build-vectors.bat**: Windows用実行スクリプト
+- **README.md**: 詳細な使用方法
+
+**特徴:**
+- TF-IDF + コサイン類似度による高速ローカル処理
+- 企業環境でも安全（外部API不要）
+- セクション単位での細かいベクトル化
+- 日本語対応
 
 ## 📦 インストール・セットアップ
 
@@ -244,5 +292,6 @@ MIT License - 詳細は`LICENSE`ファイルを参照
 
 ## 📈 バージョン履歴
 
+- **v3.0.0**: ベクトル検索機能追加、アーキテクチャ分離（18API対応）
 - **v2.1.0**: CQL検索、ラベル管理、ユーザー検索機能を追加（17API対応）
 - **v2.0.0**: DataCenter版初回リリース（13API対応）

@@ -7,6 +7,7 @@ yarn-error.log*
 # Build output
 build/
 dist/
+tools/dist/
 
 # Runtime data
 pids
@@ -48,6 +49,11 @@ logs/
 # Cache
 .cache/
 .parcel-cache/
+
+# Vector databases (generated files)
+vectors/*.json
+vector-db*.json
+local-vector-db*.json
 
 # test
 export-test/

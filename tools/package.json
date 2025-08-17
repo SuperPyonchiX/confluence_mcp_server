@@ -1,0 +1,14 @@
+{
+  "name": "confluence-vector-tools",
+  "version": "1.0.0",
+  "description": "Vector database builder for Confluence MCP Server",
+  "type": "module",
+  "scripts": {
+    "build-vectors": "node vector-builder.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
