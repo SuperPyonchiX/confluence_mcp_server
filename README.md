@@ -165,6 +165,8 @@ CONFLUENCE_BASE_URL=http://localhost:8090/rest/api
 ### 3. VS Code MCP設定
 
 VS Code設定ファイルに以下を追加：
+
+#### Basic認証の場合
 ```json
 {
   "mcp": {
@@ -175,13 +177,37 @@ VS Code設定ファイルに以下を追加：
         "CONFLUENCE_DOMAIN": "localhost:8090",
         "CONFLUENCE_AUTH_TYPE": "basic",
         "CONFLUENCE_USERNAME": "your-username",
-        "CONFLUENCE_PASSWORD": "your-password",
-        "CONFLUENCE_BASE_URL": "http://localhost:8090/rest/api"
+        "CONFLUENCE_PASSWORD": "your-password"
       }
     }
   }
 }
 ```
+
+#### Token認証の場合
+```json
+{
+  "mcp": {
+    "confluence-mcp-server": {
+      "command": "node",
+      "args": ["path/to/confluence_mcp_server/build/index.js"],
+      "env": {
+        "CONFLUENCE_DOMAIN": "localhost:8090",
+        "CONFLUENCE_AUTH_TYPE": "token",
+        "CONFLUENCE_TOKEN": "your-personal-access-token"
+      }
+    }
+  }
+}
+```
+
+**注意**: `CONFLUENCE_BASE_URL`は通常不要です。指定しない場合、以下のデフォルト値が自動的に使用されます：
+- Basic認証: `http://{CONFLUENCE_DOMAIN}/rest/api`
+- Token認証: `https://{CONFLUENCE_DOMAIN}/wiki/api/v2`
+
+`CONFLUENCE_BASE_URL`が必要な場合：
+- カスタムパス（プロキシ経由など）を使用している場合
+- デフォルトとは異なるエンドポイントを指定したい場合
 
 ## 💡 使用例
 
