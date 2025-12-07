@@ -12,15 +12,12 @@ import {
 import { ConfluenceApiClient } from './confluence-client.js';
 import { ConfluenceConfig } from './types.js';
 import { MarkdownConverter, MarkdownConversionOptions } from './markdown-converter.js';
-import { LocalRAGService } from './local-rag-service.js';
-import { RAGConfig } from './rag-types.js';
 
 // Confluence tools implementation
 class ConfluenceMCPServer {
   private server: Server;
   private confluenceClient: ConfluenceApiClient | null = null;
   private markdownConverter: MarkdownConverter;
-  private localRagService: LocalRAGService | null = null;
 
   constructor() {
     this.server = new Server({
@@ -71,7 +68,7 @@ class ConfluenceMCPServer {
           domain,
           username,
           password,
-          baseUrl: baseUrl || `http://${domain}/rest/api`,
+          baseUrl: baseUrl || `https://${domain}/rest/api`,
           authType: 'basic'
         };
       } else {
@@ -95,17 +92,6 @@ class ConfluenceMCPServer {
       }
 
       this.confluenceClient = new ConfluenceApiClient(config);
-
-      // ローカルRAGサービスを初期化（ベクトルDB検索のフォールバック用）
-      const localRagConfig: RAGConfig = {
-        vectorDbPath: './vectors/confluence-vectors.json',
-        embeddingModel: 'local-tfidf',
-        responseModel: 'local-summarizer',
-        maxTokens: 2000
-      };
-      
-      this.localRagService = new LocalRAGService(this.confluenceClient, localRagConfig);
-      console.error('Local RAG service initialized as fallback');
     }
 
     return this.confluenceClient;
@@ -224,10 +210,7 @@ class ConfluenceMCPServer {
           type: 'object',
           properties: {
             spaceId: {
-              oneOf: [
-                { type: 'number' },
-                { type: 'string' }
-              ],
+              type: ['number', 'string'],
               description: 'ページを作成するスペースのID（数値）またはキー（文字列）'
             },
             title: {
@@ -586,10 +569,7 @@ class ConfluenceMCPServer {
               description: 'アップロードするMarkdownファイルのパス（絶対パスで指定）。例: "C:/Users/ユーザ名/Documents/page.md"'
             },
             spaceId: {
-              oneOf: [
-                { type: 'number' },
-                { type: 'string' }
-              ],
+              type: ['number', 'string'],
               description: 'ページを作成するスペースのID（数値）またはキー（文字列）'
             },
             parentId: {
@@ -652,38 +632,40 @@ class ConfluenceMCPServer {
         }
       },
 
-      // ベクトルDB検索機能
+      // Children operations
       {
-        name: 'confluence_vector_search',
-        description: '事前に作成されたベクトルDBを使ってユーザーの質問に関連するページを検索します',
+        name: 'confluence_get_children',
+        description: '指定した親ページの子ページ一覧を取得します',
         inputSchema: {
           type: 'object',
           properties: {
-            query: {
-              type: 'string',
-              description: '検索クエリ'
+            parentId: {
+              type: ['number', 'string'],
+              description: '親ページのID（数値）またはキー（文字列）'
             },
-            vectorDbPath: {
+            type: {
               type: 'string',
-              description: 'ベクトルDBファイルのパス（デフォルト: ./vectors/confluence-vectors.json）',
-              default: './vectors/confluence-vectors.json'
+              enum: ['page', 'attachment'],
+              description: '取得する子コンテンツのタイプ',
+              default: 'page'
             },
-            maxResults: {
+            expand: {
+              type: 'string',
+              description: '展開するプロパティ（例: "body.storage,version"）',
+            },
+            cursor: {
+              type: 'string',
+              description: 'ページングのカーソル（Cloud版のみ）'
+            },
+            limit: {
               type: 'number',
               minimum: 1,
-              maximum: 20,
-              default: 5,
+              maximum: 250,
+              default: 25,
               description: '返却する最大結果数'
-            },
-            similarityThreshold: {
-              type: 'number',
-              minimum: 0,
-              maximum: 1,
-              default: 0.3,
-              description: '類似度の閾値（0-1）'
             }
           },
-          required: ['query']
+          required: ['parentId']
         }
       }
     ];
@@ -808,21 +790,38 @@ class ConfluenceMCPServer {
           const exportResult = await this.handleExportSpaceToMarkdown(client, args);
           return { content: [{ type: "text", text: JSON.stringify(exportResult, null, 2) }] };
 
-        // ベクトル検索
-        case 'confluence_vector_search':
-          const vectorSearchResult = await this.handleVectorSearch(args);
-          return { content: [{ type: "text", text: JSON.stringify(vectorSearchResult, null, 2) }] };
+        // Children operations
+        case 'confluence_get_children':
+          const childrenResult = await client.getChildren(args.parentId as string | number, args as any);
+          return { content: [{ type: "text", text: JSON.stringify(childrenResult, null, 2) }] };
 
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
     } catch (error: any) {
       console.error(`Error executing tool ${name}:`, error);
+
+      // MCP プロトコルに従ったエラーレスポンス形式で返す
+      const errorMessage = error.message || 'An unexpected error occurred';
+      const errorDetails = error.status ? `HTTP ${error.status}` : '';
+      const fullerrorMessage = errorDetails ? `${errorMessage} (${errorDetails})` : errorMessage;
       
       return {
-        error: true,
-        message: error.message || 'An unexpected error occurred',
-        details: error.status ? `HTTP ${error.status}` : undefined
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              message: fullerrorMessage,
+              details: {
+                originalMessage: error.message,
+                status: error.status,
+                stack: error.stack
+              }
+            }, null, 2)
+          }
+        ],
+        isError: true
       };
     }
   }
@@ -1039,118 +1038,6 @@ class ConfluenceMCPServer {
     } catch (error: any) {
       throw new Error(`Failed to get users: ${error.message}`);
     }
-  }
-
-  // ベクトル検索ハンドラーメソッド
-  // ベクトル検索ハンドラーメソッド
-  private async handleVectorSearch(args: any): Promise<any> {
-    try {
-      const vectorDbPath = args.vectorDbPath || './vectors/confluence-vectors.json';
-      const query = args.query;
-      const maxResults = args.maxResults || 5;
-      const similarityThreshold = args.similarityThreshold || 0.3;
-
-      // ローカルファイルからベクトルDBを読み込み
-      const fs = await import('fs/promises');
-      const vectorDbContent = await fs.readFile(vectorDbPath, 'utf-8');
-      const vectorDb = JSON.parse(vectorDbContent);
-
-      if (!vectorDb.vectors || !Array.isArray(vectorDb.vectors)) {
-        throw new Error('Invalid vector database format');
-      }
-
-      // ローカル埋め込みサービスを使用してクエリをベクトル化
-      if (!this.localRagService) {
-        const { LocalEmbeddingService } = await import('./local-embedding-service.js');
-        const embeddingService = new LocalEmbeddingService();
-        const queryEmbeddings = await embeddingService.generateEmbeddings([query]);
-        const queryVector = queryEmbeddings[0];
-
-        if (!queryVector) {
-          throw new Error('Failed to generate query embedding');
-        }
-
-        // コサイン類似度で検索
-        const results = vectorDb.vectors
-          .map((entry: any) => ({
-            ...entry,
-            similarity: this.cosineSimilarity(queryVector, entry.embedding)
-          }))
-          .filter((entry: any) => entry.similarity >= similarityThreshold)
-          .sort((a: any, b: any) => b.similarity - a.similarity)
-          .slice(0, maxResults);
-
-        return {
-          success: true,
-          message: `Found ${results.length} relevant sections`,
-          query: query,
-          results: results.map((result: any) => ({
-            pageId: result.pageId,
-            pageTitle: result.pageTitle,
-            sectionId: result.sectionId,
-            sectionTitle: result.sectionTitle,
-            similarity: result.similarity,
-            spaceKey: result.spaceKey,
-            url: result.url,
-            lastUpdated: result.lastUpdated
-          })),
-          metadata: {
-            totalVectors: vectorDb.vectors.length,
-            spaceInfo: vectorDb.metadata,
-            searchParameters: {
-              maxResults,
-              similarityThreshold
-            }
-          }
-        };
-      } else {
-        // 既存のローカルRAGサービスを使用（fallback）
-        const request = {
-          query,
-          maxResults,
-          similarityThreshold
-        };
-        
-        const response = await this.localRagService.query(request);
-        return {
-          success: true,
-          message: 'Vector search completed using local RAG service',
-          query: query,
-          results: response.sources,
-          metadata: response.metadata
-        };
-      }
-
-    } catch (error: any) {
-      throw new Error(`Failed to perform vector search: ${error.message}`);
-    }
-  }
-
-  private cosineSimilarity(vecA: number[], vecB: number[]): number {
-    if (!vecA || !vecB || vecA.length !== vecB.length) {
-      return 0;
-    }
-
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < vecA.length; i++) {
-      const a = vecA[i] || 0;
-      const b = vecB[i] || 0;
-      dotProduct += a * b;
-      normA += a * a;
-      normB += b * b;
-    }
-
-    normA = Math.sqrt(normA);
-    normB = Math.sqrt(normB);
-
-    if (normA === 0 || normB === 0) {
-      return 0;
-    }
-
-    return dotProduct / (normA * normB);
   }
 }
 

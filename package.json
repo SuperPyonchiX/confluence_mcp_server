@@ -1,7 +1,7 @@
 {
   "name": "confluence-mcp-server",
   "version": "3.0.1",
-  "description": "Model Context Protocol server for Confluence DataCenter with 17 APIs and local TF-IDF vector search - completely offline operation",
+  "description": "Model Context Protocol server for Confluence DataCenter with 17 APIs - page management, search, markdown conversion",
   "main": "build/index.js",
   "type": "module",
   "scripts": {

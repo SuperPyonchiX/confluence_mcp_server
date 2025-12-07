@@ -46,6 +46,74 @@ export class MarkdownConverter {
   }
 
   private setupConfluenceRules(): void {
+    // Confluenceのmarkdounマクロ処理（Mermaid等）
+    // ※preprocess ConfluenceHtmlで既にMarkdownとして展開するため
+    // ここでは何もしないダミールールにしておき、他のマクロルールに食われないようにする
+    this.turndownService.addRule('confluenceMarkdownMacro', {
+      filter: (node: any) => {
+        const nodeName = node.nodeName?.toLowerCase() || '';
+        const macroName = (node as Element).getAttribute?.('ac:name') || '';
+        return nodeName === 'ac:structured-macro' && macroName === 'markdown';
+      },
+      replacement: () => {
+        // preprocessConfluenceHtml側で処理済みなのでここでは空文字を返す
+        return '';
+      }
+    });
+
+    // Confluenceのタスクリスト処理（チェックボックス）
+    this.turndownService.addRule('confluenceTaskList', {
+      filter: (node: any) => {
+        return node.nodeName?.toLowerCase() === 'ac:task-list';
+      },
+      replacement: (_content: string, node: any) => {
+        const element = node as Element;
+        const tasks = element.querySelectorAll('ac\\:task');
+        const result: string[] = [];
+
+        tasks.forEach((task: Element) => {
+          const status = task.querySelector('ac\\:task-status')?.textContent || 'incomplete';
+          const body = task.querySelector('ac\\:task-body')?.textContent || '';
+          const checkbox = status === 'complete' ? '[x]' : '[]';
+          result.push(`- ${checkbox} ${body}`);
+        });
+
+        return `\n${result.join('\n')}\n`;
+      }
+    });
+
+    // ac:task-list 直後に続く、チェックボックスの補足説明用ネストULをMarkdownの子リストとして扱う
+    this.turndownService.addRule('confluenceTaskListNestedUL', {
+      filter: (node: any) => {
+        const nodeName = node.nodeName?.toLowerCase() || '';
+        if (nodeName !== 'ul') return false;
+
+        const element = node as Element;
+        const style = element.getAttribute('style') || '';
+        // style="list-style-type: none;" の UL のみ対象
+        if (/list-style-type:\s*none/i.test(style)) return false;
+
+        const prev = element.previousSibling as Element | null;
+        return !!prev && prev.nodeName?.toLowerCase() === 'ac:task-list';
+      },
+      replacement: (_content: string, node: any) => {
+        const element = node as Element;
+        const innerLis = element.querySelectorAll('ul > li');
+        const lines: string[] = [];
+    
+        innerLis.forEach((li: Element) => {
+          const text = li.textContent || '';
+          const cleaned = text.replace(/\s+/g, ' ').trim();
+          if (cleaned) {
+            // タスクリスト直下の説明として4スペースインデントで出力
+              lines.push(`    - ${cleaned}`);
+          }
+        });
+
+        return lines.length ? '\n' + lines.join('\n') + '\n' : '';
+      }
+    });
+
     // Confluenceのコードマクロ処理 - より汎用的なアプローチ
     this.turndownService.addRule('confluenceCodeMacro', {
       filter: (node: any) => {
@@ -56,8 +124,6 @@ export class MarkdownConverter {
       },
       replacement: (_content: string, node: any) => {
         const element = node as Element;
-        
-        console.log('Processing code macro, innerHTML:', element.innerHTML.substring(0, 200));
         
         // 言語パラメータを取得 - より広範囲に検索
         let language = '';
@@ -71,8 +137,6 @@ export class MarkdownConverter {
           }
         }
         
-        console.log('Language found:', language);
-        
         // コード内容を取得 - CDATAを含む可能性のある要素を探す
         let codeContent = '';
         const allTextNodes = element.querySelectorAll('*');
@@ -82,24 +146,18 @@ export class MarkdownConverter {
             const rawHTML = textNode.innerHTML || '';
             const rawText = textNode.textContent || '';
             
-            console.log('Found plain-text-body, innerHTML:', rawHTML);
-            console.log('Found plain-text-body, textContent:', rawText);
-            
             // CDATAセクションをチェック
             const cdataMatch = rawHTML.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
             if (cdataMatch && cdataMatch[1] !== undefined) {
               codeContent = cdataMatch[1].trim();
-              console.log('Extracted CDATA content:', codeContent);
             } else {
               codeContent = rawText.trim();
-              console.log('Using textContent:', codeContent);
             }
             break;
           }
         }
         
         const result = `\n\`\`\`${language}\n${codeContent}\n\`\`\`\n`;
-        console.log('Final markdown result:', result);
         return result;
       }
     });
@@ -116,9 +174,6 @@ export class MarkdownConverter {
           const language = codeElement.getAttribute('data-language') || '';
           const codeContent = codeElement.textContent || '';
           
-          console.log('TurndownService processing code with language:', language);
-          console.log('Code content:', codeContent.substring(0, 100));
-          
           return `\n\`\`\`${language}\n${codeContent}\n\`\`\`\n`;
         }
         return _content;
@@ -126,8 +181,12 @@ export class MarkdownConverter {
     });
     this.turndownService.addRule('confluenceOtherMacros', {
       filter: (node: any) => {
-        return node.nodeName === 'AC:STRUCTURED-MACRO' && 
-               (node as Element).getAttribute?.('ac:name') !== 'code';
+        // markdownマクロはpreprocessで処理済みなのでここでは対象外にする
+        if (node.nodeName !== 'AC:STRUCTURED-MACRO') {
+          const name = (node as Element).getAttribute?.('ac:name') || '';
+          return name !== 'code' && name !== 'markdown';
+        }
+        return false;
       },
       replacement: (content: string, node: any) => {
         const macroName = (node as Element).getAttribute?.('ac:name') || 'unknown';
@@ -146,11 +205,59 @@ export class MarkdownConverter {
       }
     });
 
-    // 表の処理
+    // 表の処理 - ConfluenceのtableをGFMテーブルに変換
     this.turndownService.addRule('table', {
       filter: 'table',
-      replacement: (content: string) => {
-        return `\n${content}\n`;
+      replacement: (_content: string, node: any) => {
+        const table = node as HTMLTableElement;
+        const rows = Array.from(table.querySelectorAll('tr')) as HTMLTableRowElement[];
+
+        if (rows.length === 0) {
+          return '';
+        }
+
+        const firstRow = rows[0];
+        const headerCells = firstRow
+          ? (Array.from(firstRow.querySelectorAll('th,td')) as HTMLTableCellElement[])
+          : [];
+        const hasHeader = headerCells.some((cell) => cell.nodeName === 'TH');
+        
+        const bodyRows = hasHeader ? rows.slice(1) : rows;
+
+        const escapeCell = (text: string): string => {
+          // パイプや改行をエスケープ
+          return text.replace(/\|/g, '\\|').replace(/\r?\n+/g, ' ').trim();
+        };
+
+        const headerTexts = headerCells.map((cell) => escapeCell(cell.textContent || ''));
+        const colCount = headerTexts.length || (bodyRows[0] ? bodyRows[0].children.length : 0);
+        const separator = Array(colCount).fill('---');
+
+        const lines: string[] = [];
+        const makeRow = (cells: HTMLTableCellElement[]): string => {
+          const texts = cells.map((cell) => escapeCell(cell.textContent || ''));
+          while (texts.length < colCount){
+            texts.push('');
+          }
+          return `| ${texts.join(' | ')} |`;
+        };
+
+        if (hasHeader) {
+          lines.push(makeRow(headerCells));
+        } else {
+          // ヘッダがない場合は1行目をヘッダとして扱う
+          lines.push(makeRow(headerCells));
+        }
+        lines.push(`| ${separator.join(' | ')} |`);
+
+        bodyRows.forEach((row) => {
+          const cells = Array.from(row.querySelectorAll('th,td')) as HTMLTableCellElement[];
+          if (cells.length > 0) {
+            lines.push(makeRow(cells));
+          }
+        });
+
+        return `\n${lines.join('\n')}\n`;
       }
     });
   }
@@ -176,8 +283,35 @@ export class MarkdownConverter {
    * Confluenceの特殊なHTMLを前処理する
    */
   private preprocessConfluenceHtml(html: string): string {
+    let processedHtml = html;
+
+    // markdownマクロ（Mermaidなど）をそのままMarkdownとして」展開
+    processedHtml = processedHtml.replace(
+      /<ac:structured-macro[^>]*ac:name="markdown"[\s\S]*?<ac:plain-text-body>([\s\S]*?)<\/ac:plain-text-body>[\s\S]*?<\/ac:structured-macro>/gi,
+      (_match, bodyContent) => {
+        const raw = String(bodyContent);
+        const cdataMatch = raw.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
+        const inner = (cdataMatch && cdataMatch[1] ? cdataMatch[1] : raw).trim();
+
+        // Mermaidの主要ダイアグラム種別を包括的に検出
+        const isMermaid = this.isMermaidDiagram(inner);
+        if (isMermaid) {
+          // 既にmermaidフェンスを含む場合は、そのままMarkdownを返す（重複防止）
+          if (/^```\s*mermaid/i.test(inner)) {
+            return `\n${inner}\n`;
+          }
+        // Turndownのコード処理に委ねるため、HTMLにエスケープしてpre/codeに包む
+        const escaped = this.escapeHtml(inner);
+        return `\n<pre><code data-language="mermaid">${escaped}</code></pre>\n`;
+        }
+
+        //それ以外のMarkdounはそのまま返す
+        return `\n${inner}\n`;
+      }
+    );
+
     // コードマクロを標準的なHTMLのpreタグに変換
-    let processedHtml = html.replace(
+    processedHtml = processedHtml.replace(
       /<ac:structured-macro ac:name="code"[^>]*?>(.*?)<\/ac:structured-macro>/gs,
       (match) => {
         // 言語パラメータを抽出
@@ -193,7 +327,47 @@ export class MarkdownConverter {
       }
     );
 
+    // markdownマクロ（CDATA直指定）にも汎用mermaid検出を適用
+    processedHtml = processedHtml.replace(
+      /<ac:structured-macro ac:name="markdown"[\s\S]*?<ac:plain-text-body><!\[CDATA\[([\s\S]*?)\]\]><\/ac:plain-text-body>[\s\S]*?<\/ac:structured-macro>/gi,
+      (_match, cdataContent) => {
+        const inner = String(cdataContent).trim();
+        if (this.isMermaidDiagram(inner)) {
+          if (/^```\s*mermaid/i.test(inner)) {
+            return `\n${inner}\n`;
+          }
+          const escaped = this.escapeHtml(inner);
+          return `\n<pre><code data-language="mermaid">${escaped}</code></pre>\n`;
+        }
+        return `\n${inner}\n`;
+      }
+    );
+
     return processedHtml;
+  }
+
+  /**
+   * Mermaidダイアグラムを汎用的に検出
+   * 対応: flowchart/graph, sequence, class, state, er, gantt, journey, pie, timeline
+   */
+  private isMermaidDiagram (text: string): boolean {
+    const t = text.trim();
+    // 冒頭にフェンスがある場合も吸収（^^mermaid：..）
+    if (/^```\s*mermaid/i.test(t)) return true;
+    // 代表的なキーワードのいずれかを含む
+    const patterns = [
+      /\bflowchart\b/i,
+      /\bgraph\b/i,
+      /\bsequence(diagram)?\b/i,
+      /\bclass(diagram)?\b/i,
+      /\bstate (diagram)?\b/i,
+      /\ber\b/i,
+      /\bgantt\b/i,
+      /\bjourney\b/i,
+      /\bpie\b/i,
+      /\btimeline\b/i
+    ];
+    return patterns.some((p) => p.test(t));
   }
 
   /**
@@ -206,6 +380,61 @@ export class MarkdownConverter {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Turndown後のMarkdownを、期待する手間の形式に近づけるために後処理する
+   */
+  private cleanupMarkdown (markdown: string): string {
+    let result = markdown;
+    
+    // 見出しの番号付きタイトルでエスケーブされた！。を通常の・に戻す
+    // 例："#1\. はじめに" -> "#1. はじめに
+    result = result.replace(/^(#+\s+\d+)\\\./gm, '$1.');
+
+    // 通常行の番号付きテキストでエスケープされた \\.(例: "1\\. 説明"）を解除
+    // 見出しやコードブロック内は対象外だが、ここでは簡易に「行頭の数字+\\. +空白」を正規化する
+    // 例："1\\. コードレビュー実施" -> "1. コードレビュー実施"
+    result = result.replace(/^(\d+)\\\.\s+/gm, '$1. ');
+    
+    // --- 区切り線の前後に空行を1つだけ残す
+    result = result.replace(/\n{3,}---/g, '\n\n---');
+    result = result.replace(/---\n{3,}/g, '---\n\n');
+    
+    // 箇条書きの先頭に余分なスペースが入ったものを1スペースに正規化
+    // 例："-   項目" -> "- 項目"
+    result = result.replace(/^-\s{2,}/gm, '- ');
+
+    // 壊れたネスト表現の修正: "- -  子項目" を子リストのインデントに
+    // 例: "- -   GitHub Copilot拡張機能がインストール済み" -> "    - GitHub Copilot拡張機能がインストール済み"
+    result = result.replace(/^-\s+-\s+/gm, '    - ');
+    // 親行と子行の間の不要な空行を除去
+    result = result.replace(/(^-\s+.*)\n\n(\s{4}-\s+)/gm, '$1\n$2');
+
+    // 表のヘッダ行区切りの"｜---｜などはそのままにしつつ、
+    // 先頭・未尾の不要な空行をトリム
+    result = result.trim() + '\n';
+
+    // バックスラッシュ付きの不要エスケープを一度に除去（\`, \```, \-, \#, \[, \]等）
+    result = result.replace(/\\`{1,3}|\\-|\\#|\\\[|\\\]|/g, (m) => m.slice(1));
+    
+    // Mermaidブロックの整形：言語指定後に改行を入れる（種別非依存）
+    result = result.replace(/```mermaid\s+/g, '```mermaid\n');
+    // Mermaidブロック内部の改行を復元（インライン化された場合のフォーマット修正）
+    result = result.replace(/```mermaid([\s\S]*?)```/g, (_m, inner) => {
+      let s = inner;
+      // flowchartの宣言
+      s = s.replace(/\s*flowchart\s+([A-Z]{2})\s*/i, (_mm: string, dir: string) => `flowchart ${dir}\n`);
+      // エッジ行（-->や-->|label|など）の前に改行を入れる
+      s = s.replace(/\s+([A-Za-z0-9_\[\]{}:.]+\s*--?>\|?[^\n]*?\|?\s*[A-Za-z0-9_\[\]{}:.]+)/g, '\n$1');
+      //..style指示は行頭に
+      s = s.replace(/\s+style\s+/g, '\nstyle ');
+      // 未の余分な空日を削除
+      s = s.replace(/\s+$/, '\n');
+      return '```mermaid\n' + s + '```';
+    });
+
+    return result;
   }
 
   /**
@@ -341,16 +570,7 @@ export class MarkdownConverter {
     return titleMatch && titleMatch[1] ? titleMatch[1].trim() : null;
   }
 
-  private cleanupMarkdown(markdown: string): string {
-    return markdown
-      .replace(/\n{3,}/g, '\n\n') // 3つ以上の連続改行を2つに
-      .replace(/\\\n/g, '\n') // 不要なエスケープを削除
-      .trim();
-  }
-
   private simpleMarkdownToHtml(markdown: string): string {
-    console.log('Converting markdown to HTML - input length:', markdown.length);
-    
     // 改行文字を統一
     let html = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
@@ -358,8 +578,8 @@ export class MarkdownConverter {
     const lines = html.split('\n');
     const processedLines: string[] = [];
     let inTable = false;
-    let inCodeBlock = false;
-    let inList = false;
+    let inCodeBlock: boolean | string = false; // false | 'code' | 'mermaid'
+    let inList: boolean | string = false; // false | true (task-list) | 'ul' (通常リスト)
     let listDepth = 0;
 
     for (let i = 0; i < lines.length; i++) {
@@ -378,8 +598,12 @@ export class MarkdownConverter {
         }
         // リスト終了
         if (inList) {
-          for (let d = listDepth; d > 0; d--) {
-            processedLines.push('</ul>');
+          if (typeof inList === 'string' && inList === 'ul') {
+            for (let d = listDepth; d > 0; d--) {
+              processedLines.push('</ul>');
+            }
+          } else if (inList === true) {
+            processedLines.push('</ac:task-list>');
           }
           inList = false;
           listDepth = 0;
@@ -405,17 +629,32 @@ export class MarkdownConverter {
 
         if (!inCodeBlock) {
           const language = trimmed.substring(3).trim();
-          // Confluenceのstructured-macroコードブロック形式を使用
-          const macroId = this.generateMacroId();
-          processedLines.push(`<ac:structured-macro ac:name="code" ac:schema-version="1" ac:macro-id="${macroId}">`);
-          if (language) {
-            processedLines.push(`<ac:parameter ac:name="language">${language}</ac:parameter>`);
+
+          //Mermaidの場合はMarkdownマクロを使用
+          if (language === 'mermaid') {
+            const macroId = this.generateMacroId();
+            processedLines.push(`<ac:structured-macro ac:name="markdown" ac:schema-version="1" ac:macro-id="${macroId}">`);
+            processedLines.push('<ac:plain-text-body><![CDATA[```mermaid');
+            inCodeBlock = 'mermaid';
+          } else {
+            // 通常のコードブロック: Confluenceのstructured-macroコードブロック形式を使用
+            const macroId = this.generateMacroId();
+            processedLines.push(`<ac:structured-macro ac:name="code" ac:schema-version="1" ac:macro-id="${macroId}">`);
+            if (language) {
+              processedLines.push(`<ac:parameter ac:name="language">${language}</ac:parameter>`);
+            }
+            processedLines.push('<ac:plain-text-body><![CDATA[');
+            inCodeBlock = 'code';
           }
-          processedLines.push('<ac:plain-text-body><![CDATA[');
-          inCodeBlock = true;
         } else {
-          processedLines.push(']]></ac:plain-text-body>');
-          processedLines.push('</ac:structured-macro>');
+          // コードブロック終了
+          if (inCodeBlock === 'mermaid') {
+            processedLines.push('```]]></ac:plain-text-body>');
+            processedLines.push('</ac:structured-macro>');
+          } else {
+            processedLines.push(']]></ac:plain-text-body>');
+            processedLines.push('</ac:structured-macro>');
+          }
           inCodeBlock = false;
         }
         continue;
@@ -436,8 +675,12 @@ export class MarkdownConverter {
           inTable = false;
         }
         if (inList) {
-          for (let d = listDepth; d > 0; d--) {
-            processedLines.push('</ul>');
+          if (typeof inList === 'string' && inList === 'ul') {
+            for (let d = listDepth; d > 0; d--) {
+              processedLines.push('</ul>');
+            }
+          } else if (inList === true) {
+            processedLines.push('</ac:task-list>');
           }
           inList = false;
           listDepth = 0;
@@ -461,13 +704,56 @@ export class MarkdownConverter {
 
       // リストの処理（テーブル内ではない場合のみ）
       if ((trimmed.startsWith('- ') || trimmed.startsWith('* ')) && !inTable) {
-        const content = this.processInlineMarkdown(trimmed.substring(2));
-        if (!inList) {
-          processedLines.push('<ul>');
-          inList = true;
-          listDepth = 1;
+        const restOfLine = trimmed.substring(2);
+
+        // チェックボックスの判定: - [ ] または - [x]
+        const checkboxMatch = restOfLine.match(/^\[([ xX])\]\s*(.*)$/);
+        
+        if (checkboxMatch) {
+          // チェックボックスリスト
+          const isChecked = checkboxMatch[1] && checkboxMatch[1].toLowerCase() === 'x';
+          const taskBody = checkboxMatch[2] || '';
+
+          if (!inList) {
+            // タスクリストの開始
+            processedLines.push('<ac:task-list>');
+            inList = true;
+            listDepth = 1;
+          } else if (inList === "ul") {
+            // 通常リストからタスクリストに切り替え
+            processedLines.push('</ul>');
+            processedLines.push('<ac:task-list>');
+            inList = true;
+          }
+
+          // タスクアイテムの生成
+          const taskId = this.generateTaskId();
+          const taskUuid = this.generateMacroId();
+          const taskStatus = isChecked ? 'complete' : 'incomplete';
+
+          processedLines.push('<ac:task>');
+          processedLines.push(`<ac:task-id>${taskId}</ac:task-id>`);
+          processedLines.push(`<ac:task-uuid>${taskUuid}</ac:task-uuid>`);
+          processedLines.push(`<ac:task-status>${taskStatus}</ac:task-status>`);
+          processedLines.push(`<ac:task-body>${this.processInlineMarkdown(taskBody)}</ac:task-body>`);
+          processedLines.push('</ac:task>');
+        } else {
+          // 通常のリストアイテム
+          const content = this.processInlineMarkdown(restOfLine);
+
+          if (!inList) {
+            processedLines.push(`<ul>`);
+            inList = 'ul';
+            listDepth = 1;
+          } else if (inList === true) {
+            //タスクリストから通常リストに切り替え
+            processedLines.push('</ac:task-list>');
+            processedLines.push('<ul>');
+            inList = 'ul';
+          }
+          
+          processedLines.push(`<li>${content}</li>`);
         }
-        processedLines.push(`<li>${content}</li>`);
         continue;
       }
 
@@ -509,8 +795,12 @@ export class MarkdownConverter {
 
     // 未終了の要素を閉じる
     if (inList) {
-      for (let d = listDepth; d > 0; d--) {
-        processedLines.push('</ul>');
+      if (typeof inList === 'string' && inList === 'ul') {
+        for (let d = listDepth; d > 0; d--) {
+          processedLines.push('</ul>');
+        }
+      } else if (inList === true) {
+        processedLines.push('</ac:task-list>');
       }
     }
 
@@ -520,7 +810,6 @@ export class MarkdownConverter {
     }
 
     const result = processedLines.join('\n');
-    console.log('HTML conversion complete - output length:', result.length);
     return result;
   }
 
@@ -595,7 +884,6 @@ export class MarkdownConverter {
     // HTMLの整形
     html = html.replace(/>\s+</g, '><');
     
-    console.log('Final HTML output (first 500 chars):', html.substring(0, 500));
     return html.trim();
   }
 
@@ -606,6 +894,11 @@ export class MarkdownConverter {
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
     });
+  }
+
+  private generateTaskId(): number {
+    // タスクIDを生成（連番）
+    return Math.floor(Math.random() * 1000000);
   }
 
   private sanitizeFilename(filename: string): string {

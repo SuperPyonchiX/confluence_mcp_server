@@ -29,7 +29,7 @@ export class ConfluenceApiClient {
 
     // 認証方法に応じて認証情報を設定
     let authConfig: { username: string; password: string };
-    
+
     if (config.authType === 'token') {
       // APIトークン認証（Cloud版）
       if (!config.email || !config.apiToken) {
@@ -73,7 +73,7 @@ export class ConfluenceApiClient {
     const data = error.response?.data as any;
 
     let message = 'An error occurred while communicating with Confluence API';
-    
+
     if (data?.message) {
       message = data.message;
     } else if (status === 401) {
@@ -96,10 +96,10 @@ export class ConfluenceApiClient {
   // Page operations
   async getPages(params?: PageSearchParams): Promise<MultiEntityResult<Page>> {
     const searchParams = new URLSearchParams();
-    
+
     // DataCenter版では異なるパラメータ名を使用
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (params?.id) {
       searchParams.append('id', params.id.join(','));
     }
@@ -137,7 +137,7 @@ export class ConfluenceApiClient {
 
     const endpoint = isDataCenter ? '/content' : '/pages';
     const response = await this.client.get(`${endpoint}?${searchParams}`);
-    
+
     // DataCenter版のレスポンス形式を統一
     if (isDataCenter) {
       // DataCenter版では直接results配列を返す
@@ -146,7 +146,7 @@ export class ConfluenceApiClient {
         _links: response.data._links || {}
       };
     }
-    
+
     return response.data;
   }
 
@@ -167,7 +167,7 @@ export class ConfluenceApiClient {
   }): Promise<Page> {
     const searchParams = new URLSearchParams();
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版では expand パラメータを使用
       let expandParams = ['version'];
@@ -227,15 +227,15 @@ export class ConfluenceApiClient {
     }
 
     const endpoint = isDataCenter ? `/content/${id}` : `/pages/${id}`;
-    
+
     const response = await this.client.get(`${endpoint}?${searchParams}`);
-    
+
     return response.data;
   }
 
   async createPage(pageData: PageCreateRequest, options?: { private?: boolean }): Promise<Page> {
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版では /content エンドポイントを使用し、異なるパラメータ構造
       // spaceIdが数値の場合、スペース一覧から該当するキーを探す
@@ -245,11 +245,11 @@ export class ConfluenceApiClient {
         // 全スペース一覧を取得して、IDが一致するスペースを探す
         const spacesResult = await this.getSpaces({ limit: 50 });
         const targetSpace = spacesResult.results?.find(space => space.id === pageData.spaceId);
-        
+
         if (!targetSpace) {
           throw new Error(`Space with ID ${pageData.spaceId} not found`);
         }
-        
+
         spaceKey = targetSpace.key;
         console.error('[DEBUG] Found space key:', spaceKey, 'for ID:', pageData.spaceId);
       } else {
@@ -285,7 +285,7 @@ export class ConfluenceApiClient {
 
   async updatePage(pageData: PageUpdateRequest): Promise<Page> {
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版: /rest/api/content/{id} を使用
       const updateData = {
@@ -305,14 +305,14 @@ export class ConfluenceApiClient {
 
   async deletePage(id: number, options?: { purge?: boolean; draft?: boolean }): Promise<void> {
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版: /rest/api/content/{id} を使用
       const searchParams = new URLSearchParams();
       if (options?.purge) {
         searchParams.append('status', 'trashed'); // DataCenterではstatusパラメータ
       }
-      
+
       await this.client.delete(`/content/${id}?${searchParams}`);
     } else {
       // Cloud版: /pages/{id} を使用
@@ -323,7 +323,7 @@ export class ConfluenceApiClient {
       if (options?.draft) {
         searchParams.append('draft', 'true');
       }
-      
+
       await this.client.delete(`/pages/${id}?${searchParams}`);
     }
   }
@@ -331,7 +331,7 @@ export class ConfluenceApiClient {
   // Blog Post operations
   async getBlogPosts(params?: BlogPostSearchParams): Promise<MultiEntityResult<BlogPost>> {
     const searchParams = new URLSearchParams();
-    
+
     if (params?.id) {
       searchParams.append('id', params.id.join(','));
     }
@@ -377,7 +377,7 @@ export class ConfluenceApiClient {
     includeCollaborators?: boolean;
   }): Promise<BlogPost> {
     const searchParams = new URLSearchParams();
-    
+
     if (options?.bodyFormat) {
       searchParams.append('body-format', options.bodyFormat);
     }
@@ -463,7 +463,7 @@ export class ConfluenceApiClient {
   }): Promise<MultiEntityResult<Space>> {
     const searchParams = new URLSearchParams();
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版では異なるパラメータ名を使用
       if (params?.key) {
@@ -511,9 +511,9 @@ export class ConfluenceApiClient {
     }
 
     const endpoint = isDataCenter ? '/space' : '/spaces';
-    
+
     const response = await this.client.get(`${endpoint}?${searchParams}`);
-    
+
     // DataCenter版のレスポンス形式を統一
     if (isDataCenter) {
       // DataCenter版では直接results配列を返す
@@ -522,7 +522,7 @@ export class ConfluenceApiClient {
         _links: response.data._links || {}
       };
     }
-    
+
     return response.data;
   }
 
@@ -537,7 +537,7 @@ export class ConfluenceApiClient {
   }): Promise<Space> {
     const searchParams = new URLSearchParams();
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版では expand パラメータを使用
       let expandParams = [];
@@ -550,7 +550,7 @@ export class ConfluenceApiClient {
       if (expandParams.length > 0) {
         searchParams.append('expand', expandParams.join(','));
       }
-      
+
       // DataCenter版では spaceKey でもアクセス可能
       const endpoint = `/space/${id}`;
       const response = await this.client.get(`${endpoint}?${searchParams}`);
@@ -601,7 +601,7 @@ export class ConfluenceApiClient {
   // Attachment operations
   async getAttachments(params?: AttachmentSearchParams): Promise<MultiEntityResult<Attachment>> {
     const searchParams = new URLSearchParams();
-    
+
     if (params?.status) {
       params.status.forEach(status => searchParams.append('status', status));
     }
@@ -635,7 +635,7 @@ export class ConfluenceApiClient {
     includeCollaborators?: boolean;
   }): Promise<Attachment> {
     const searchParams = new URLSearchParams();
-    
+
     if (options?.version) {
       searchParams.append('version', options.version.toString());
     }
@@ -679,7 +679,7 @@ export class ConfluenceApiClient {
     limit?: number;
   }): Promise<MultiEntityResult<Label>> {
     const searchParams = new URLSearchParams();
-    
+
     if (params?.prefix) {
       searchParams.append('prefix', params.prefix);
     }
@@ -705,7 +705,7 @@ export class ConfluenceApiClient {
   // User operations
   async getCurrentUser(): Promise<User> {
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版では /user/current エンドポイントを使用
       const response = await this.client.get('/user/current');
@@ -723,7 +723,7 @@ export class ConfluenceApiClient {
 
   async getUserById(accountId: string): Promise<User> {
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版では /user エンドポイントを使用
       const response = await this.client.get(`/user?key=${accountId}`);
@@ -742,7 +742,7 @@ export class ConfluenceApiClient {
   }): Promise<MultiEntityResult<User>> {
     const searchParams = new URLSearchParams();
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版では異なるパラメータを使用
       if (params?.limit) {
@@ -777,7 +777,7 @@ export class ConfluenceApiClient {
     limit?: number;
   }): Promise<MultiEntityResult<ContentProperty>> {
     const searchParams = new URLSearchParams();
-    
+
     if (params?.key) {
       searchParams.append('key', params.key);
     }
@@ -809,7 +809,7 @@ export class ConfluenceApiClient {
   }
 
   async createContentProperty(
-    contentId: number, 
+    contentId: number,
     contentType: 'page' | 'blogpost' | 'attachment',
     property: { key: string; value: any }
   ): Promise<ContentProperty> {
@@ -855,7 +855,7 @@ export class ConfluenceApiClient {
   }): Promise<MultiEntityResult<any>> {
     const searchParams = new URLSearchParams();
     searchParams.append('cql', params.cql);
-    
+
     if (params.expand) {
       searchParams.append('expand', params.expand);
     }
@@ -891,7 +891,7 @@ export class ConfluenceApiClient {
   }): Promise<MultiEntityResult<User>> {
     const searchParams = new URLSearchParams();
     const isDataCenter = this.config.authType === 'basic';
-    
+
     if (isDataCenter) {
       // DataCenter版では /user エンドポイントを使用
       if (params?.query) {
@@ -918,6 +918,120 @@ export class ConfluenceApiClient {
       }
       const response = await this.client.get(`/users?${searchParams}`);
       return response.data;
+    }
+  }
+
+  // Children operations
+  async getChildren(parentId: string | number, options?: {
+    type?: 'page' | 'attachment';
+    expand?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<MultiEntityResult<Page>> {
+    const searchParams = new URLSearchParams();
+    const isDataCenter = this.config.authType === 'basic';
+
+    // expand パラメータを設定（子コンテンツを実際に取得するために必須）
+    let expandParam = options?.expand;
+    if (!expandParam) {
+      //デフォルトでページの基本情報を展開
+      if (options?.type === 'page') {
+        expandParam = 'page';
+      } else if (options?.type === 'attachment') {
+        expandParam = 'attachment';
+      } else {
+        //タイプが指定されていない場合は、ページと添付ファイルの両方を取得
+        expandParam = 'page,attachment';
+      }
+    }
+
+    searchParams.append('expand', expandParam);
+
+    if (options?.cursor && isDataCenter) {
+      searchParams.append('cursor', options.cursor);
+    }
+    if (options?.limit) {
+      searchParams.append('limit', options.limit.toString());
+    }
+
+    if (isDataCenter) {
+      // Datacenter版：/content/fid｝/child または/content / fid｝/child/｛type｝を使用
+      let endpoint = `/content/${parentId}/child`;
+      if (options?.type) {
+        endpoint = `/content/${parentId}/child/${options.type}`;
+      }
+
+      const response = await this.client.get(`${endpoint}?${searchParams}`);
+      
+      // DataCenter版のレスポンス形式を処理
+      if (options?.type) {
+        // 特定タイプの場合、直接 results 配列が返される
+        return {
+          results: response.data.results || [],
+          _links: response.data._links || {}
+        };
+      } else {
+        //全タイプの場合、各タイプごとのオブジェクトが返される
+        const allResults: any[] = [];
+        const responseData = response.data;
+
+        // ページタイプの結果を取得
+        if (responseData.page && responseData.page.results) {
+          allResults.push(...responseData.page.results);
+        }
+        
+        //添付ファイルタイプの結果を取得（必要に応じて）
+        if (responseData.attachment && responseData.attachment.results) {
+          allResults.push(...responseData.attachment.results);
+        }
+        return {
+          results: allResults,
+          _links: responseData._links || {}
+        };
+      }
+    } else {
+      // Cloud版：まず/pages/fid｝/childrenを試行、404の場合/content/fid｝/child にフォールバック
+      try {
+        const response = await this.client.get(`/pages/${parentId}/children?${searchParams}`);
+        return response.data;
+      } catch (error: any) {
+        if (error.status === 404) {
+          //フォールバック：Datacenter形式のエンドポイントを試行
+          console.error('[INFO] Falling back to /content/${id}/child endpoint');
+          let endpoint = `/content/${parentId}/child`;
+          if (options?.type) {
+            endpoint = `/content/${parentId}/child/${options.type}`;
+          }
+
+          const response = await this.client.get(`${endpoint}?${searchParams}`);
+          
+          //レスポンス形式を処理（DataCenterと同様）
+          if (options?.type) {
+            return {
+              results: response.data.results || [],
+              _links: response.data._links || {}
+            };
+          } else {
+            const allResults: any[] = [];
+            const responseData = response.data;
+
+            if (responseData.page && responseData.page.results) {
+              allResults.push(...responseData.page.results);
+            }
+            
+            if (responseData.attachment && responseData.attachment.results) {
+              allResults.push(...responseData.attachment.results);
+            }
+            
+            return {
+              results: allResults,
+              _links: responseData._links || {}
+            };
+          }
+        }
+        // 404以外のエラーは再スロー
+        throw error;
+      }
     }
   }
 }
