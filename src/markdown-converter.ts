@@ -44,6 +44,17 @@ export class MarkdownConverter {
     'CAUTION': 'warning'
   };
 
+  // 絵文字 → HTML実体参照のマッピング
+  private readonly emojiMap: Map<string, string> = new Map([
+    ['📋', '&#128203;'], ['📄', '&#128196;'], ['🔍', '&#128269;'],
+    ['🏷️', '&#127991;'], ['👥', '&#128101;'], ['🏢', '&#127970;'],
+    ['📝', '&#128221;'], ['⭐', '&#11088;'], ['✅', '&#9989;'],
+    ['❌', '&#10060;'], ['🚀', '&#128640;'], ['📦', '&#128230;'],
+    ['💡', '&#128161;'], ['🔧', '&#128295;'], ['⚠️', '&#9888;'],
+    ['📊', '&#128202;'], ['🤝', '&#129309;'], ['📈', '&#128200;'],
+    ['🎯', '&#127919;']
+  ]);
+
   constructor() {
     this.turndownService = new TurndownService({
       headingStyle: 'atx',
@@ -232,9 +243,9 @@ export class MarkdownConverter {
         const headerCells = firstRow
           ? (Array.from(firstRow.querySelectorAll('th,td')) as HTMLTableCellElement[])
           : [];
-        const hasHeader = headerCells.some((cell) => cell.nodeName === 'TH');
-        
-        const bodyRows = hasHeader ? rows.slice(1) : rows;
+
+        // ヘッダの有無に関わらず、最初の行はヘッダとして使用するためスキップ（GFMテーブルにはヘッダが必須）
+        const bodyRows = rows.slice(1);
 
         const escapeCell = (text: string): string => {
           // パイプや改行をエスケープ
@@ -254,12 +265,8 @@ export class MarkdownConverter {
           return `| ${texts.join(' | ')} |`;
         };
 
-        if (hasHeader) {
-          lines.push(makeRow(headerCells));
-        } else {
-          // ヘッダがない場合は1行目をヘッダとして扱う
-          lines.push(makeRow(headerCells));
-        }
+        // 最初の行をヘッダとして出力（THがなくてもGFMテーブルにはヘッダが必要）
+        lines.push(makeRow(headerCells));
         lines.push(`| ${separator.join(' | ')} |`);
 
         bodyRows.forEach((row) => {
@@ -1341,26 +1348,10 @@ export class MarkdownConverter {
   private processInlineMarkdown(text: string): string {
     if (!text) return '';
 
-    // 先に絵文字を HTML実体参照に変換
-    text = text.replace(/📋/g, '&#128203;');
-    text = text.replace(/📄/g, '&#128196;');
-    text = text.replace(/🔍/g, '&#128269;');
-    text = text.replace(/🏷️/g, '&#127991;');
-    text = text.replace(/👥/g, '&#128101;');
-    text = text.replace(/🏢/g, '&#127970;');
-    text = text.replace(/📝/g, '&#128221;');
-    text = text.replace(/⭐/g, '&#11088;');
-    text = text.replace(/✅/g, '&#9989;');
-    text = text.replace(/❌/g, '&#10060;');
-    text = text.replace(/🚀/g, '&#128640;');
-    text = text.replace(/📦/g, '&#128230;');
-    text = text.replace(/💡/g, '&#128161;');
-    text = text.replace(/🔧/g, '&#128295;');
-    text = text.replace(/⚠️/g, '&#9888;');
-    text = text.replace(/📊/g, '&#128202;');
-    text = text.replace(/🤝/g, '&#129309;');
-    text = text.replace(/📈/g, '&#128200;');
-    text = text.replace(/🎯/g, '&#127919;');
+    // 先に絵文字を HTML実体参照に変換（emojiMapを使用）
+    for (const [emoji, entity] of this.emojiMap) {
+      text = text.replace(new RegExp(emoji, 'g'), entity);
+    }
 
     // オートリンク: <https://url> → <a>タグ（HTMLエスケープ前に処理）
     text = text.replace(/<(https?:\/\/[^\s>]+)>/g, '{{AUTOLINK:$1}}');
