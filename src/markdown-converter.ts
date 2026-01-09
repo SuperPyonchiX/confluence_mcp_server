@@ -260,6 +260,33 @@ export class MarkdownConverter {
         return `\n${lines.join('\n')}\n`;
       }
     });
+
+    // Confluence画像をMarkdown画像形式に変換
+    this.turndownService.addRule('confluenceImage', {
+      filter: (node: any) => {
+        return node.nodeName?.toLowerCase() === 'ac:image';
+      },
+      replacement: (_content: string, node: any) => {
+        const element = node as Element;
+        const alt = element.getAttribute('ac:alt') || '';
+
+        // ri:url（外部画像）を優先的にチェック
+        const urlElement = element.querySelector('ri\\:url');
+        if (urlElement) {
+          const url = urlElement.getAttribute('ri:value') || '';
+          return `![${alt}](${url})`;
+        }
+
+        // ri:attachment（添付ファイル）をチェック
+        const attachmentElement = element.querySelector('ri\\:attachment');
+        if (attachmentElement) {
+          const filename = attachmentElement.getAttribute('ri:filename') || '';
+          return `![${alt}](${filename})`;
+        }
+
+        return '';
+      }
+    });
   }
 
   /**
@@ -703,12 +730,17 @@ export class MarkdownConverter {
       }
 
       // リストの処理（テーブル内ではない場合のみ）
-      if ((trimmed.startsWith('- ') || trimmed.startsWith('* ')) && !inTable) {
-        const restOfLine = trimmed.substring(2);
+      // インデントを考慮してネストリストに対応
+      const listMatch = line.match(/^(\s*)([-*])\s+(.*)$/);
+      if (listMatch && !inTable && !inCodeBlock) {
+        const indent = listMatch[1]?.length || 0;
+        const restOfLine = listMatch[3] || '';
+        // インデントレベル計算（2スペース単位）
+        const newListLevel = Math.floor(indent / 2) + 1;
 
         // チェックボックスの判定: - [ ] または - [x]
         const checkboxMatch = restOfLine.match(/^\[([ xX])\]\s*(.*)$/);
-        
+
         if (checkboxMatch) {
           // チェックボックスリスト
           const isChecked = checkboxMatch[1] && checkboxMatch[1].toLowerCase() === 'x';
@@ -719,11 +751,14 @@ export class MarkdownConverter {
             processedLines.push('<ac:task-list>');
             inList = true;
             listDepth = 1;
-          } else if (inList === "ul") {
+          } else if (inList === 'ul') {
             // 通常リストからタスクリストに切り替え
-            processedLines.push('</ul>');
+            for (let d = listDepth; d > 0; d--) {
+              processedLines.push('</ul>');
+            }
             processedLines.push('<ac:task-list>');
             inList = true;
+            listDepth = 1;
           }
 
           // タスクアイテムの生成
@@ -742,17 +777,52 @@ export class MarkdownConverter {
           const content = this.processInlineMarkdown(restOfLine);
 
           if (!inList) {
-            processedLines.push(`<ul>`);
+            // リスト開始
+            processedLines.push('<ul>');
             inList = 'ul';
             listDepth = 1;
           } else if (inList === true) {
-            //タスクリストから通常リストに切り替え
+            // タスクリストから通常リストに切り替え
             processedLines.push('</ac:task-list>');
             processedLines.push('<ul>');
             inList = 'ul';
+            listDepth = 1;
+          } else if (inList === 'ul') {
+            // ネストレベルの変化を処理
+            if (newListLevel > listDepth) {
+              // ネストが深くなる
+              for (let d = listDepth; d < newListLevel; d++) {
+                processedLines.push('<ul>');
+              }
+              listDepth = newListLevel;
+            } else if (newListLevel < listDepth) {
+              // ネストが浅くなる
+              for (let d = listDepth; d > newListLevel; d--) {
+                processedLines.push('</li>');
+                processedLines.push('</ul>');
+              }
+              listDepth = newListLevel;
+            }
           }
-          
+
           processedLines.push(`<li>${content}</li>`);
+        }
+        continue;
+      }
+
+      // 画像の処理: ![alt](url)
+      const imageMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+      if (imageMatch && !inTable && !inList && !inCodeBlock) {
+        const alt = imageMatch[1] || '';
+        const url = imageMatch[2] || '';
+
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          // 外部画像URL
+          processedLines.push(`<ac:image ac:alt="${this.escapeXml(alt)}"><ri:url ri:value="${this.escapeXml(url)}" /></ac:image>`);
+        } else {
+          // 添付ファイル（ローカルパス）
+          const filename = url.split('/').pop() || url;
+          processedLines.push(`<ac:image ac:alt="${this.escapeXml(alt)}"><ri:attachment ri:filename="${this.escapeXml(filename)}" /></ac:image>`);
         }
         continue;
       }
@@ -815,7 +885,7 @@ export class MarkdownConverter {
 
   private processInlineMarkdown(text: string): string {
     if (!text) return '';
-    
+
     // 先に絵文字を HTML実体参照に変換
     text = text.replace(/📋/g, '&#128203;');
     text = text.replace(/📄/g, '&#128196;');
@@ -836,31 +906,24 @@ export class MarkdownConverter {
     text = text.replace(/🤝/g, '&#129309;');
     text = text.replace(/📈/g, '&#128200;');
     text = text.replace(/🎯/g, '&#127919;');
-    
-    // インラインコードの処理（HTMLタグ生成はしない）
-    text = text.replace(/`([^`]+)`/g, '$1');
-    
-    // 太字の処理（** を除去）
-    text = text.replace(/\*\*([^*\n]+)\*\*/g, '$1');
-    
-    // 斜体の処理（* を除去）
-    text = text.replace(/\*([^*\n]+)\*/g, '$1');
-    
-    // リンクの処理（[text](url) を text に）
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
-    
-    // HTML特殊文字のエスケープは絵文字処理の後に実行
-    text = text.replace(/&(?!#\d+;)/g, '&amp;'); // 実体参照以外の&をエスケープ
+
+    // HTML特殊文字のエスケープを先に実行（タグ生成前）
+    text = text.replace(/&(?!#\d+;)/g, '&amp;');
     text = text.replace(/</g, '&lt;');
     text = text.replace(/>/g, '&gt;');
-    text = text.replace(/"/g, '&quot;');
-    text = text.replace(/'/g, '&#39;');
-    
-    return text;
-    text = text.replace(/>/g, '&gt;');
-    text = text.replace(/"/g, '&quot;');
-    text = text.replace(/'/g, '&#39;');
-    
+
+    // インラインコード → <code>タグ生成
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // 太字 → <strong>タグ生成（先に処理）
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+
+    // 斜体 → <em>タグ生成（太字の後に処理）
+    text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+    // リンク → <a>タグ生成
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
     return text;
   }
 
@@ -885,6 +948,16 @@ export class MarkdownConverter {
     html = html.replace(/>\s+</g, '><');
     
     return html.trim();
+  }
+
+  private escapeXml(text: string): string {
+    if (!text) return '';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   private generateMacroId(): string {
