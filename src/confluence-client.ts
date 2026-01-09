@@ -241,7 +241,6 @@ export class ConfluenceApiClient {
       // spaceIdが数値の場合、スペース一覧から該当するキーを探す
       let spaceKey: string;
       if (typeof pageData.spaceId === 'number') {
-        console.error('[DEBUG] Looking for space with ID:', pageData.spaceId);
         // 全スペース一覧を取得して、IDが一致するスペースを探す
         const spacesResult = await this.getSpaces({ limit: 50 });
         const targetSpace = spacesResult.results?.find(space => space.id === pageData.spaceId);
@@ -251,7 +250,6 @@ export class ConfluenceApiClient {
         }
 
         spaceKey = targetSpace.key;
-        console.error('[DEBUG] Found space key:', spaceKey, 'for ID:', pageData.spaceId);
       } else {
         spaceKey = pageData.spaceId;
       }
@@ -268,7 +266,6 @@ export class ConfluenceApiClient {
         ...(pageData.parentId && { ancestors: [{ id: pageData.parentId }] })
       };
 
-      console.error('[DEBUG] Sending dcPageData:', JSON.stringify(dcPageData, null, 2));
       const response = await this.client.post('/content', dcPageData);
       return response.data;
     } else {
@@ -996,8 +993,7 @@ export class ConfluenceApiClient {
         return response.data;
       } catch (error: any) {
         if (error.status === 404) {
-          //フォールバック：Datacenter形式のエンドポイントを試行
-          console.error('[INFO] Falling back to /content/${id}/child endpoint');
+          // フォールバック：Datacenter形式のエンドポイントを試行
           let endpoint = `/content/${parentId}/child`;
           if (options?.type) {
             endpoint = `/content/${parentId}/child/${options.type}`;

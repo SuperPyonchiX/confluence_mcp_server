@@ -692,15 +692,8 @@ class ConfluenceMCPServer {
           return { content: [{ type: "text", text: JSON.stringify(pageResult, null, 2) }] };
 
         case 'confluence_create_page':
-          try {
-            console.error('[DEBUG] confluence_create_page called with args:', JSON.stringify(args, null, 2));
-            const createdPage = await client.createPage(args as any, { private: args.private as boolean });
-            console.error('[DEBUG] confluence_create_page success:', JSON.stringify(createdPage, null, 2));
-            return { content: [{ type: "text", text: JSON.stringify(createdPage, null, 2) }] };
-          } catch (error) {
-            console.error('[DEBUG] confluence_create_page error:', error);
-            throw error;
-          }
+          const createdPage = await client.createPage(args as any, { private: args.private as boolean });
+          return { content: [{ type: "text", text: JSON.stringify(createdPage, null, 2) }] };
 
         case 'confluence_update_page':
           // 現在のページ情報を取得してバージョン番号を自動インクリメント
@@ -770,15 +763,8 @@ class ConfluenceMCPServer {
           return { content: [{ type: "text", text: JSON.stringify(pageToMdResult, null, 2) }] };
 
         case 'confluence_markdown_to_page':
-          try {
-            console.error('[DEBUG] confluence_markdown_to_page called with args:', JSON.stringify(args, null, 2));
-            const mdToPageResult = await this.handleMarkdownToPage(client, args);
-            console.error('[DEBUG] confluence_markdown_to_page success:', JSON.stringify(mdToPageResult, null, 2));
-            return { content: [{ type: "text", text: JSON.stringify(mdToPageResult, null, 2) }] };
-          } catch (error) {
-            console.error('[DEBUG] confluence_markdown_to_page error:', error);
-            throw error;
-          }
+          const mdToPageResult = await this.handleMarkdownToPage(client, args);
+          return { content: [{ type: "text", text: JSON.stringify(mdToPageResult, null, 2) }] };
 
         case 'confluence_update_page_from_markdown':
           const updateFromMdResult = await this.handleUpdatePageFromMarkdown(client, args);
@@ -862,42 +848,29 @@ class ConfluenceMCPServer {
   }
 
   private async handleMarkdownToPage(client: ConfluenceApiClient, args: any): Promise<any> {
-    try {
-      console.error('[DEBUG] handleMarkdownToPage - Starting with args:', JSON.stringify(args, null, 2));
-      
-      const { title, content } = await this.markdownConverter.loadMarkdownForConfluence(args.filePath);
-      console.error('[DEBUG] handleMarkdownToPage - Loaded title:', title);
-      console.error('[DEBUG] handleMarkdownToPage - Loaded content length:', content.length);
+    const { title, content } = await this.markdownConverter.loadMarkdownForConfluence(args.filePath);
 
-      const pageData = {
-        spaceId: args.spaceId,
-        title,
-        body: {
-          storage: {
-            value: content,
-            representation: 'storage' as const
-          }
-        },
-        parentId: args.parentId,
-        status: args.status || 'current'
-      };
+    const pageData = {
+      spaceId: args.spaceId,
+      title,
+      body: {
+        storage: {
+          value: content,
+          representation: 'storage' as const
+        }
+      },
+      parentId: args.parentId,
+      status: args.status || 'current'
+    };
 
-      console.error('[DEBUG] handleMarkdownToPage - pageData:', JSON.stringify(pageData, null, 2));
+    const createdPage = await client.createPage(pageData);
 
-      const createdPage = await client.createPage(pageData);
-      
-      console.error('[DEBUG] handleMarkdownToPage - Created page:', JSON.stringify(createdPage, null, 2));
-      
-      return {
-        success: true,
-        message: 'Page created from Markdown successfully',
-        pageId: createdPage.id,
-        title: createdPage.title
-      };
-    } catch (error: any) {
-      console.error('[DEBUG] handleMarkdownToPage - Error:', error);
-      throw new Error(`Failed to create page from Markdown: ${error.message}`);
-    }
+    return {
+      success: true,
+      message: 'Page created from Markdown successfully',
+      pageId: createdPage.id,
+      title: createdPage.title
+    };
   }
 
 
