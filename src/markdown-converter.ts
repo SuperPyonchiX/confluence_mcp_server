@@ -323,6 +323,64 @@ export class MarkdownConverter {
         return `\n> [!${alertType}]\n${quotedLines}\n`;
       }
     });
+
+    // Confluenceユーザーメンションを@username形式に変換
+    this.turndownService.addRule('confluenceUserMention', {
+      filter: (node: any) => {
+        const nodeName = node.nodeName?.toLowerCase() || '';
+        if (nodeName !== 'ac:link') return false;
+        const element = node as Element;
+        return element.querySelector('ri\\:user') !== null;
+      },
+      replacement: (_content: string, node: any) => {
+        const element = node as Element;
+        const userElement = element.querySelector('ri\\:user');
+        const username = userElement?.getAttribute('ri:username') ||
+                        userElement?.getAttribute('ri:userkey') ||
+                        userElement?.getAttribute('ri:account-id') || 'unknown';
+        return `@${username}`;
+      }
+    });
+
+    // Confluenceページリンクを[PageTitle]形式に変換
+    this.turndownService.addRule('confluencePageLink', {
+      filter: (node: any) => {
+        const nodeName = node.nodeName?.toLowerCase() || '';
+        if (nodeName !== 'ac:link') return false;
+        const element = node as Element;
+        return element.querySelector('ri\\:page') !== null;
+      },
+      replacement: (_content: string, node: any) => {
+        const element = node as Element;
+        const pageElement = element.querySelector('ri\\:page');
+        const pageTitle = pageElement?.getAttribute('ri:content-title') || 'Page';
+        const spaceKey = pageElement?.getAttribute('ri:space-key') || '';
+        // Markdownリンク形式で出力（スペースキーがあればconfluence://形式）
+        return spaceKey ? `[${pageTitle}](confluence://${spaceKey}/${encodeURIComponent(pageTitle)})`
+                        : `[${pageTitle}]`;
+      }
+    });
+
+    // Confluence展開マクロ（expand）を<details>形式に変換
+    this.turndownService.addRule('confluenceExpand', {
+      filter: (node: any) => {
+        const nodeName = node.nodeName?.toLowerCase() || '';
+        if (nodeName !== 'ac:structured-macro') return false;
+        const macroName = (node as Element).getAttribute?.('ac:name') || '';
+        return macroName === 'expand';
+      },
+      replacement: (_content: string, node: any) => {
+        const element = node as Element;
+        // タイトルパラメータを取得
+        const titleParam = element.querySelector('ac\\:parameter[ac\\:name="title"]');
+        const title = titleParam?.textContent?.trim() || 'Details';
+        // rich-text-bodyの内容を取得
+        const bodyElement = element.querySelector('ac\\:rich-text-body');
+        const bodyContent = bodyElement?.textContent?.trim() || '';
+        // HTML <details> 形式で出力
+        return `\n<details>\n<summary>${title}</summary>\n\n${bodyContent}\n</details>\n`;
+      }
+    });
   }
 
   /**
@@ -518,7 +576,10 @@ export class MarkdownConverter {
     if (!markdown) return '';
 
     // フロントマターを除去
-    const { content } = this.extractFrontMatter(markdown);
+    let { content } = this.extractFrontMatter(markdown);
+
+    // リンク参照形式を展開
+    content = this.expandLinkReferences(content);
 
     // 簡易的なMarkdown→HTML変換
     let html = this.simpleMarkdownToHtml(content);
@@ -672,7 +733,7 @@ export class MarkdownConverter {
     let inCodeBlock: boolean | string = false; // false | 'code' | 'mermaid'
     let inList: boolean | string = false; // false | true (task-list) | 'ul' (通常リスト)
     let listDepth = 0;
-    let inBlockquote = false;
+    let blockquoteDepth = 0; // ネスト引用のレベル
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -689,15 +750,21 @@ export class MarkdownConverter {
           inTable = false;
         }
         // 引用ブロック終了
-        if (inBlockquote) {
-          processedLines.push('</blockquote>');
-          inBlockquote = false;
+        if (blockquoteDepth > 0) {
+          for (let d = blockquoteDepth; d > 0; d--) {
+            processedLines.push('</blockquote>');
+          }
+          blockquoteDepth = 0;
         }
         // リスト終了
         if (inList) {
           if (typeof inList === 'string' && inList === 'ul') {
             for (let d = listDepth; d > 0; d--) {
               processedLines.push('</ul>');
+            }
+          } else if (typeof inList === 'string' && inList === 'ol') {
+            for (let d = listDepth; d > 0; d--) {
+              processedLines.push('</ol>');
             }
           } else if (inList === true) {
             processedLines.push('</ac:task-list>');
@@ -880,6 +947,105 @@ export class MarkdownConverter {
         continue;
       }
 
+      // 番号付きリストの処理: 1. 2. 3. または 1) 2) 3)
+      const orderedListMatch = line.match(/^(\s*)(\d+)[\.\)]\s+(.*)$/);
+      if (orderedListMatch && !inTable && !inCodeBlock) {
+        const indent = orderedListMatch[1]?.length || 0;
+        const restOfLine = orderedListMatch[3] || '';
+        const content = this.processInlineMarkdown(restOfLine);
+        const newListLevel = Math.floor(indent / 2) + 1;
+
+        if (!inList) {
+          // 番号付きリスト開始
+          processedLines.push('<ol>');
+          inList = 'ol';
+          listDepth = 1;
+        } else if (inList === 'ul') {
+          // 通常リストから番号付きリストに切り替え
+          for (let d = listDepth; d > 0; d--) {
+            processedLines.push('</ul>');
+          }
+          processedLines.push('<ol>');
+          inList = 'ol';
+          listDepth = 1;
+        } else if (inList === true) {
+          // タスクリストから番号付きリストに切り替え
+          processedLines.push('</ac:task-list>');
+          processedLines.push('<ol>');
+          inList = 'ol';
+          listDepth = 1;
+        } else if (inList === 'ol') {
+          // ネストレベルの変化を処理
+          if (newListLevel > listDepth) {
+            for (let d = listDepth; d < newListLevel; d++) {
+              processedLines.push('<ol>');
+            }
+            listDepth = newListLevel;
+          } else if (newListLevel < listDepth) {
+            for (let d = listDepth; d > newListLevel; d--) {
+              processedLines.push('</li>');
+              processedLines.push('</ol>');
+            }
+            listDepth = newListLevel;
+          }
+        }
+
+        processedLines.push(`<li>${content}</li>`);
+        continue;
+      }
+
+      // <details>タグの処理（HTML形式の折りたたみ）→ Confluence展開マクロ
+      if (trimmed === '<details>' || trimmed.startsWith('<details>')) {
+        // 次の行からsummaryとコンテンツを収集
+        let summaryTitle = 'Details';
+        const detailsContent: string[] = [];
+        let j = i + 1;
+        let foundSummary = false;
+        let foundEnd = false;
+
+        while (j < lines.length) {
+          const nextLine = lines[j];
+          if (!nextLine) { j++; continue; }
+          const nextTrimmed = nextLine.trim();
+
+          if (nextTrimmed.startsWith('<summary>')) {
+            // <summary>タイトル</summary> 形式
+            const summaryMatch = nextTrimmed.match(/<summary>([^<]*)<\/summary>/);
+            if (summaryMatch && summaryMatch[1]) {
+              summaryTitle = summaryMatch[1];
+            }
+            foundSummary = true;
+            j++;
+            continue;
+          }
+
+          if (nextTrimmed === '</details>') {
+            foundEnd = true;
+            break;
+          }
+
+          if (foundSummary && nextTrimmed) {
+            detailsContent.push(nextTrimmed);
+          }
+          j++;
+        }
+
+        if (foundEnd) {
+          // Confluence展開マクロを生成
+          const macroId = this.generateMacroId();
+          processedLines.push(`<ac:structured-macro ac:name="expand" ac:schema-version="1" ac:macro-id="${macroId}">`);
+          processedLines.push(`<ac:parameter ac:name="title">${this.escapeXml(summaryTitle)}</ac:parameter>`);
+          processedLines.push('<ac:rich-text-body>');
+          detailsContent.forEach(line => {
+            processedLines.push(`<p>${this.processInlineMarkdown(line)}</p>`);
+          });
+          processedLines.push('</ac:rich-text-body>');
+          processedLines.push('</ac:structured-macro>');
+          i = j; // ループカウンタを更新
+          continue;
+        }
+      }
+
       // 画像の処理: ![alt](url)
       const imageMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
       if (imageMatch && !inTable && !inList && !inCodeBlock) {
@@ -940,18 +1106,35 @@ export class MarkdownConverter {
           continue;
         }
 
-        // 通常の引用ブロック
-        const quoteContent = trimmed.replace(/^>\s*/, '');
-        if (!inBlockquote) {
-          processedLines.push('<blockquote>');
-          inBlockquote = true;
+        // 通常の引用ブロック（ネスト対応）
+        // 引用レベルを計算: > = 1, > > = 2, etc.
+        const quoteMatch = trimmed.match(/^(>+)\s*(.*)/);
+        if (quoteMatch && quoteMatch[1]) {
+          const newDepth = quoteMatch[1].replace(/\s/g, '').length;
+          const quoteContent = quoteMatch[2] || '';
+
+          // ネストレベルの調整
+          if (newDepth > blockquoteDepth) {
+            // ネストが深くなる
+            for (let d = blockquoteDepth; d < newDepth; d++) {
+              processedLines.push('<blockquote>');
+            }
+          } else if (newDepth < blockquoteDepth) {
+            // ネストが浅くなる
+            for (let d = blockquoteDepth; d > newDepth; d--) {
+              processedLines.push('</blockquote>');
+            }
+          }
+          blockquoteDepth = newDepth;
+          processedLines.push(`<p>${this.processInlineMarkdown(quoteContent)}</p>`);
         }
-        processedLines.push(`<p>${this.processInlineMarkdown(quoteContent)}</p>`);
         continue;
-      } else if (inBlockquote) {
+      } else if (blockquoteDepth > 0) {
         // 引用ブロック終了
-        processedLines.push('</blockquote>');
-        inBlockquote = false;
+        for (let d = blockquoteDepth; d > 0; d--) {
+          processedLines.push('</blockquote>');
+        }
+        blockquoteDepth = 0;
       }
 
       // テーブルの処理
@@ -991,14 +1174,20 @@ export class MarkdownConverter {
     }
 
     // 未終了の要素を閉じる
-    if (inBlockquote) {
-      processedLines.push('</blockquote>');
+    if (blockquoteDepth > 0) {
+      for (let d = blockquoteDepth; d > 0; d--) {
+        processedLines.push('</blockquote>');
+      }
     }
 
     if (inList) {
       if (typeof inList === 'string' && inList === 'ul') {
         for (let d = listDepth; d > 0; d--) {
           processedLines.push('</ul>');
+        }
+      } else if (typeof inList === 'string' && inList === 'ol') {
+        for (let d = listDepth; d > 0; d--) {
+          processedLines.push('</ol>');
         }
       } else if (inList === true) {
         processedLines.push('</ac:task-list>');
@@ -1038,10 +1227,19 @@ export class MarkdownConverter {
     text = text.replace(/📈/g, '&#128200;');
     text = text.replace(/🎯/g, '&#127919;');
 
+    // オートリンク: <https://url> → <a>タグ（HTMLエスケープ前に処理）
+    text = text.replace(/<(https?:\/\/[^\s>]+)>/g, '{{AUTOLINK:$1}}');
+    // メールリンク: <email@example.com> → <a>タグ
+    text = text.replace(/<([^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)>/g, '{{MAILTO:$1}}');
+
     // HTML特殊文字のエスケープを先に実行（タグ生成前）
     text = text.replace(/&(?!#\d+;)/g, '&amp;');
     text = text.replace(/</g, '&lt;');
     text = text.replace(/>/g, '&gt;');
+
+    // オートリンクプレースホルダーを実際のタグに変換
+    text = text.replace(/\{\{AUTOLINK:([^}]+)\}\}/g, '<a href="$1">$1</a>');
+    text = text.replace(/\{\{MAILTO:([^}]+)\}\}/g, '<a href="mailto:$1">$1</a>');
 
     // インラインコード → <code>タグ生成
     text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -1049,11 +1247,19 @@ export class MarkdownConverter {
     // 打消し線 → <del>タグ生成
     text = text.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
 
-    // 太字 → <strong>タグ生成（先に処理）
-    text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    // 太字斜体（3つの*または_）→ <strong><em>タグ生成（最初に処理）
+    text = text.replace(/\*\*\*([^*\n]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+    text = text.replace(/___([^_\n]+)___/g, '<strong><em>$1</em></strong>');
 
-    // 斜体 → <em>タグ生成（太字の後に処理）
+    // 太字 → <strong>タグ生成（アスタリスク形式）
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    // 太字 → <strong>タグ生成（アンダースコア形式）
+    text = text.replace(/__([^_\n]+)__/g, '<strong>$1</strong>');
+
+    // 斜体 → <em>タグ生成（アスタリスク形式、太字の後に処理）
     text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    // 斜体 → <em>タグ生成（アンダースコア形式）
+    text = text.replace(/_([^_\n]+)_/g, '<em>$1</em>');
 
     // リンク → <a>タグ生成
     text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
@@ -1114,5 +1320,45 @@ export class MarkdownConverter {
       .replace(/\s+/g, '_') // スペースをアンダースコアに
       .replace(/-+/g, '-') // 連続するハイフンを単一に
       .substring(0, 200); // 長すぎるファイル名を制限
+  }
+
+  /**
+   * リンク参照形式を展開する
+   * [text][ref] と [ref]: url を [text](url) に変換
+   */
+  private expandLinkReferences(content: string): string {
+    // リンク参照定義を収集: [ref]: url
+    const linkRefs: Record<string, string> = {};
+    const refRegex = /^\[([^\]]+)\]:\s*(.+)$/gm;
+    let match;
+    while ((match = refRegex.exec(content)) !== null) {
+      if (match[1] && match[2]) {
+        linkRefs[match[1].toLowerCase()] = match[2].trim();
+      }
+    }
+
+    // リンク参照が存在しない場合はそのまま返す
+    if (Object.keys(linkRefs).length === 0) {
+      return content;
+    }
+
+    // リンク参照形式を展開: [text][ref] → [text](url)
+    let result = content.replace(/\[([^\]]+)\]\[([^\]]*)\]/g, (_, text, ref) => {
+      const key = (ref || text).toLowerCase();
+      const url = linkRefs[key];
+      return url ? `[${text}](${url})` : `[${text}]`;
+    });
+
+    // ショートカット形式を展開: [text] → [text](url)（定義がある場合のみ）
+    result = result.replace(/\[([^\]]+)\](?!\()/g, (match, text) => {
+      const key = text.toLowerCase();
+      const url = linkRefs[key];
+      return url ? `[${text}](${url})` : match;
+    });
+
+    // 参照定義行を除去
+    result = result.replace(/^\[([^\]]+)\]:\s*.+\n?/gm, '');
+
+    return result;
   }
 }
