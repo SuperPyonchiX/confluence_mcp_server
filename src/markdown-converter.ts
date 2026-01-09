@@ -34,6 +34,16 @@ export interface PageMarkdownResult {
 export class MarkdownConverter {
   private turndownService: TurndownService;
 
+  // GitHub Alerts ↔ Confluence情報パネルのマッピング
+  private readonly alertTypeMap: Record<string, string> = {
+    'NOTE': 'info',
+    'TIP': 'tip',
+    'INFO': 'info',
+    'IMPORTANT': 'note',
+    'WARNING': 'warning',
+    'CAUTION': 'warning'
+  };
+
   constructor() {
     this.turndownService = new TurndownService({
       headingStyle: 'atx',
@@ -177,56 +187,6 @@ export class MarkdownConverter {
           return `\n\`\`\`${language}\n${codeContent}\n\`\`\`\n`;
         }
         return _content;
-      }
-    });
-    // Confluence情報パネル（info, tip, note, warning）をGitHub Alerts形式に変換
-    this.turndownService.addRule('confluenceInfoPanel', {
-      filter: (node: any) => {
-        const nodeName = node.nodeName?.toLowerCase() || '';
-        if (nodeName !== 'ac:structured-macro') return false;
-        const macroName = (node as Element).getAttribute?.('ac:name') || '';
-        return ['info', 'tip', 'note', 'warning'].includes(macroName);
-      },
-      replacement: (_content: string, node: any) => {
-        const macroName = (node as Element).getAttribute?.('ac:name') || 'info';
-        const body = node.querySelector('ac\\:rich-text-body')?.textContent || '';
-
-        // Confluence macro → GitHub Alert type mapping
-        const alertTypeMap: Record<string, string> = {
-          'info': 'NOTE',
-          'tip': 'TIP',
-          'note': 'IMPORTANT',
-          'warning': 'WARNING'
-        };
-        const alertType = alertTypeMap[macroName] || 'NOTE';
-
-        const lines = body.trim().split('\n').map((line: string) => `> ${line}`).join('\n');
-        return `\n> [!${alertType}]\n${lines}\n`;
-      }
-    });
-
-    // Confluence展開マクロをHTML <details>形式に変換
-    this.turndownService.addRule('confluenceExpand', {
-      filter: (node: any) => {
-        const nodeName = node.nodeName?.toLowerCase() || '';
-        if (nodeName !== 'ac:structured-macro') return false;
-        return (node as Element).getAttribute?.('ac:name') === 'expand';
-      },
-      replacement: (_content: string, node: any) => {
-        // タイトルを取得
-        let title = 'Details';
-        const params = node.querySelectorAll('ac\\:parameter');
-        for (const param of params) {
-          if (param.getAttribute('ac:name') === 'title') {
-            title = param.textContent || 'Details';
-            break;
-          }
-        }
-
-        // ボディを取得
-        const body = node.querySelector('ac\\:rich-text-body')?.textContent || '';
-
-        return `\n<details>\n<summary>${title}</summary>\n\n${body.trim()}\n</details>\n`;
       }
     });
 
@@ -554,9 +514,10 @@ export class MarkdownConverter {
   }
 
   /**
-   * HTMLエスケープ
+   * HTML/XMLエスケープ
    */
   private escapeHtml(text: string): string {
+    if (!text) return '';
     return text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -634,47 +595,12 @@ export class MarkdownConverter {
     content = this.expandLinkReferences(content);
 
     // 簡易的なMarkdown→HTML変換
-    let html = this.simpleMarkdownToHtml(expandedContent);
+    let html = this.simpleMarkdownToHtml(content);
 
     // ConfluenceのStorage形式に適合するよう調整
     html = this.adaptToConfluenceStorage(html);
 
     return html;
-  }
-
-  /**
-   * リンク参照形式を展開する
-   * [text][ref] と [ref]: url 形式を [text](url) に変換
-   */
-  private expandLinkReferences(content: string): string {
-    // リンク参照定義を収集: [ref]: url
-    const linkRefs: Record<string, string> = {};
-    const refRegex = /^\[([^\]]+)\]:\s*(.+)$/gm;
-    let match;
-    while ((match = refRegex.exec(content)) !== null) {
-      if (match[1] && match[2]) {
-        linkRefs[match[1].toLowerCase()] = match[2].trim();
-      }
-    }
-
-    // リンク参照形式を展開: [text][ref] → [text](url)
-    let result = content.replace(/\[([^\]]+)\]\[([^\]]*)\]/g, (_: string, text: string, ref: string) => {
-      const key = (ref || text).toLowerCase();
-      const url = linkRefs[key];
-      return url ? `[${text}](${url})` : `[${text}]`;
-    });
-
-    // 短縮形式を展開: [ref] → [ref](url) (参照定義がある場合のみ)
-    result = result.replace(/\[([^\]]+)\](?!\[|\()/g, (_: string, text: string) => {
-      const key = text.toLowerCase();
-      const url = linkRefs[key];
-      return url ? `[${text}](${url})` : `[${text}]`;
-    });
-
-    // 参照定義行を除去
-    result = result.replace(/^\[([^\]]+)\]:\s*.+$/gm, '');
-
-    return result;
   }
 
   /**
@@ -821,6 +747,8 @@ export class MarkdownConverter {
     let inList: boolean | string = false; // false | true (task-list) | 'ul' | 'ol'
     let listDepth = 0;
     let blockquoteDepth = 0; // ネスト引用のレベル
+    let inAlert: string | false = false; // false | 'NOTE' | 'WARNING' | etc.
+    let alertContent: string[] = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -868,14 +796,7 @@ export class MarkdownConverter {
         }
         // アラート終了
         if (inAlert) {
-          const alertTypeMap: Record<string, string> = {
-            'NOTE': 'info',
-            'TIP': 'tip',
-            'IMPORTANT': 'note',
-            'WARNING': 'warning',
-            'CAUTION': 'warning'
-          };
-          const panelType = alertTypeMap[inAlert] || 'info';
+          const panelType = this.alertTypeMap[inAlert] || 'info';
           const macroId = this.generateMacroId();
           processedLines.push(`<ac:structured-macro ac:name="${panelType}" ac:schema-version="1" ac:macro-id="${macroId}">`);
           processedLines.push('<ac:rich-text-body>');
@@ -968,7 +889,7 @@ export class MarkdownConverter {
       // 引用ブロックとGitHub Alertsの処理
       if (trimmed.startsWith('>')) {
         // GitHub Alerts形式の検出: > [!NOTE], > [!WARNING], etc.
-        const alertMatch = trimmed.match(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
+        const alertMatch = trimmed.match(/^>\s*\[!(NOTE|TIP|INFO|IMPORTANT|WARNING|CAUTION)\]/i);
         if (alertMatch && alertMatch[1]) {
           inAlert = alertMatch[1].toUpperCase();
           alertContent = [];
@@ -1016,14 +937,7 @@ export class MarkdownConverter {
         }
         // アラートを閉じる
         if (inAlert) {
-          const alertTypeMap: Record<string, string> = {
-            'NOTE': 'info',
-            'TIP': 'tip',
-            'IMPORTANT': 'note',
-            'WARNING': 'warning',
-            'CAUTION': 'warning'
-          };
-          const panelType = alertTypeMap[inAlert] || 'info';
+          const panelType = this.alertTypeMap[inAlert] || 'info';
           const macroId = this.generateMacroId();
           processedLines.push(`<ac:structured-macro ac:name="${panelType}" ac:schema-version="1" ac:macro-id="${macroId}">`);
           processedLines.push('<ac:rich-text-body>');
@@ -1239,7 +1153,7 @@ export class MarkdownConverter {
           // Confluence展開マクロを生成
           const macroId = this.generateMacroId();
           processedLines.push(`<ac:structured-macro ac:name="expand" ac:schema-version="1" ac:macro-id="${macroId}">`);
-          processedLines.push(`<ac:parameter ac:name="title">${this.escapeXml(summaryTitle)}</ac:parameter>`);
+          processedLines.push(`<ac:parameter ac:name="title">${this.escapeHtml(summaryTitle)}</ac:parameter>`);
           processedLines.push('<ac:rich-text-body>');
           detailsContent.forEach(line => {
             processedLines.push(`<p>${this.processInlineMarkdown(line)}</p>`);
@@ -1259,11 +1173,11 @@ export class MarkdownConverter {
 
         if (url.startsWith('http://') || url.startsWith('https://')) {
           // 外部画像URL
-          processedLines.push(`<ac:image ac:alt="${this.escapeXml(alt)}"><ri:url ri:value="${this.escapeXml(url)}" /></ac:image>`);
+          processedLines.push(`<ac:image ac:alt="${this.escapeHtml(alt)}"><ri:url ri:value="${this.escapeHtml(url)}" /></ac:image>`);
         } else {
           // 添付ファイル（ローカルパス）
           const filename = url.split('/').pop() || url;
-          processedLines.push(`<ac:image ac:alt="${this.escapeXml(alt)}"><ri:attachment ri:filename="${this.escapeXml(filename)}" /></ac:image>`);
+          processedLines.push(`<ac:image ac:alt="${this.escapeHtml(alt)}"><ri:attachment ri:filename="${this.escapeHtml(filename)}" /></ac:image>`);
         }
         continue;
       }
@@ -1277,7 +1191,7 @@ export class MarkdownConverter {
       // 引用ブロックの処理: >
       if (trimmed.startsWith('>') && !inTable && !inList && !inCodeBlock) {
         // GitHub Alerts形式のチェック: > [!NOTE], > [!WARNING], etc.
-        const alertMatch = trimmed.match(/^>\s*\[!(NOTE|TIP|INFO|WARNING|CAUTION)\]\s*$/i);
+        const alertMatch = trimmed.match(/^>\s*\[!(NOTE|TIP|INFO|IMPORTANT|WARNING|CAUTION)\]\s*$/i);
         if (alertMatch && alertMatch[1]) {
           // アラートタイプを検出、次の行からコンテンツを収集
           const alertType = alertMatch[1].toLowerCase();
@@ -1394,10 +1308,6 @@ export class MarkdownConverter {
         for (let d = listDepth; d > 0; d--) {
           processedLines.push('</ol>');
         }
-      } else if (typeof inList === 'string' && inList === 'ol') {
-        for (let d = listDepth; d > 0; d--) {
-          processedLines.push('</ol>');
-        }
       } else if (inList === true) {
         processedLines.push('</ac:task-list>');
       }
@@ -1410,14 +1320,7 @@ export class MarkdownConverter {
     }
 
     if (inAlert) {
-      const alertTypeMap: Record<string, string> = {
-        'NOTE': 'info',
-        'TIP': 'tip',
-        'IMPORTANT': 'note',
-        'WARNING': 'warning',
-        'CAUTION': 'warning'
-      };
-      const panelType = alertTypeMap[inAlert] || 'info';
+      const panelType = this.alertTypeMap[inAlert] || 'info';
       const macroId = this.generateMacroId();
       processedLines.push(`<ac:structured-macro ac:name="${panelType}" ac:schema-version="1" ac:macro-id="${macroId}">`);
       processedLines.push('<ac:rich-text-body>');
@@ -1520,16 +1423,6 @@ export class MarkdownConverter {
     html = html.replace(/>\s+</g, '><');
     
     return html.trim();
-  }
-
-  private escapeXml(text: string): string {
-    if (!text) return '';
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
   }
 
   private generateMacroId(): string {
