@@ -179,12 +179,64 @@ export class MarkdownConverter {
         return _content;
       }
     });
+    // Confluence情報パネル（info, tip, note, warning）をGitHub Alerts形式に変換
+    this.turndownService.addRule('confluenceInfoPanel', {
+      filter: (node: any) => {
+        const nodeName = node.nodeName?.toLowerCase() || '';
+        if (nodeName !== 'ac:structured-macro') return false;
+        const macroName = (node as Element).getAttribute?.('ac:name') || '';
+        return ['info', 'tip', 'note', 'warning'].includes(macroName);
+      },
+      replacement: (_content: string, node: any) => {
+        const macroName = (node as Element).getAttribute?.('ac:name') || 'info';
+        const body = node.querySelector('ac\\:rich-text-body')?.textContent || '';
+
+        // Confluence macro → GitHub Alert type mapping
+        const alertTypeMap: Record<string, string> = {
+          'info': 'NOTE',
+          'tip': 'TIP',
+          'note': 'IMPORTANT',
+          'warning': 'WARNING'
+        };
+        const alertType = alertTypeMap[macroName] || 'NOTE';
+
+        const lines = body.trim().split('\n').map((line: string) => `> ${line}`).join('\n');
+        return `\n> [!${alertType}]\n${lines}\n`;
+      }
+    });
+
+    // Confluence展開マクロをHTML <details>形式に変換
+    this.turndownService.addRule('confluenceExpand', {
+      filter: (node: any) => {
+        const nodeName = node.nodeName?.toLowerCase() || '';
+        if (nodeName !== 'ac:structured-macro') return false;
+        return (node as Element).getAttribute?.('ac:name') === 'expand';
+      },
+      replacement: (_content: string, node: any) => {
+        // タイトルを取得
+        let title = 'Details';
+        const params = node.querySelectorAll('ac\\:parameter');
+        for (const param of params) {
+          if (param.getAttribute('ac:name') === 'title') {
+            title = param.textContent || 'Details';
+            break;
+          }
+        }
+
+        // ボディを取得
+        const body = node.querySelector('ac\\:rich-text-body')?.textContent || '';
+
+        return `\n<details>\n<summary>${title}</summary>\n\n${body.trim()}\n</details>\n`;
+      }
+    });
+
     this.turndownService.addRule('confluenceOtherMacros', {
       filter: (node: any) => {
         // markdownマクロはpreprocessで処理済みなのでここでは対象外にする
         if (node.nodeName !== 'AC:STRUCTURED-MACRO') {
           const name = (node as Element).getAttribute?.('ac:name') || '';
-          return name !== 'code' && name !== 'markdown';
+          return name !== 'code' && name !== 'markdown' &&
+                 !['info', 'tip', 'note', 'warning', 'expand'].includes(name);
         }
         return false;
       },
@@ -444,13 +496,51 @@ export class MarkdownConverter {
     // フロントマターを除去
     const { content } = this.extractFrontMatter(markdown);
 
+    // リンク参照形式を展開
+    const expandedContent = this.expandLinkReferences(content);
+
     // 簡易的なMarkdown→HTML変換
-    let html = this.simpleMarkdownToHtml(content);
+    let html = this.simpleMarkdownToHtml(expandedContent);
 
     // ConfluenceのStorage形式に適合するよう調整
     html = this.adaptToConfluenceStorage(html);
 
     return html;
+  }
+
+  /**
+   * リンク参照形式を展開する
+   * [text][ref] と [ref]: url 形式を [text](url) に変換
+   */
+  private expandLinkReferences(content: string): string {
+    // リンク参照定義を収集: [ref]: url
+    const linkRefs: Record<string, string> = {};
+    const refRegex = /^\[([^\]]+)\]:\s*(.+)$/gm;
+    let match;
+    while ((match = refRegex.exec(content)) !== null) {
+      if (match[1] && match[2]) {
+        linkRefs[match[1].toLowerCase()] = match[2].trim();
+      }
+    }
+
+    // リンク参照形式を展開: [text][ref] → [text](url)
+    let result = content.replace(/\[([^\]]+)\]\[([^\]]*)\]/g, (_: string, text: string, ref: string) => {
+      const key = (ref || text).toLowerCase();
+      const url = linkRefs[key];
+      return url ? `[${text}](${url})` : `[${text}]`;
+    });
+
+    // 短縮形式を展開: [ref] → [ref](url) (参照定義がある場合のみ)
+    result = result.replace(/\[([^\]]+)\](?!\[|\()/g, (_: string, text: string) => {
+      const key = text.toLowerCase();
+      const url = linkRefs[key];
+      return url ? `[${text}](${url})` : `[${text}]`;
+    });
+
+    // 参照定義行を除去
+    result = result.replace(/^\[([^\]]+)\]:\s*.+$/gm, '');
+
+    return result;
   }
 
   /**
@@ -579,8 +669,11 @@ export class MarkdownConverter {
     const processedLines: string[] = [];
     let inTable = false;
     let inCodeBlock: boolean | string = false; // false | 'code' | 'mermaid'
-    let inList: boolean | string = false; // false | true (task-list) | 'ul' (通常リスト)
+    let inList: boolean | string = false; // false | true (task-list) | 'ul' | 'ol'
     let listDepth = 0;
+    let blockquoteDepth = 0;
+    let inAlert: string | false = false; // false | 'NOTE' | 'WARNING' | 'TIP' | 'IMPORTANT' | 'CAUTION'
+    let alertContent: string[] = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -602,11 +695,41 @@ export class MarkdownConverter {
             for (let d = listDepth; d > 0; d--) {
               processedLines.push('</ul>');
             }
+          } else if (typeof inList === 'string' && inList === 'ol') {
+            for (let d = listDepth; d > 0; d--) {
+              processedLines.push('</ol>');
+            }
           } else if (inList === true) {
             processedLines.push('</ac:task-list>');
           }
           inList = false;
           listDepth = 0;
+        }
+        // ブロック引用終了
+        if (blockquoteDepth > 0) {
+          for (let d = blockquoteDepth; d > 0; d--) {
+            processedLines.push('</blockquote>');
+          }
+          blockquoteDepth = 0;
+        }
+        // アラート終了
+        if (inAlert) {
+          const alertTypeMap: Record<string, string> = {
+            'NOTE': 'info',
+            'TIP': 'tip',
+            'IMPORTANT': 'note',
+            'WARNING': 'warning',
+            'CAUTION': 'warning'
+          };
+          const panelType = alertTypeMap[inAlert] || 'info';
+          const macroId = this.generateMacroId();
+          processedLines.push(`<ac:structured-macro ac:name="${panelType}" ac:schema-version="1" ac:macro-id="${macroId}">`);
+          processedLines.push('<ac:rich-text-body>');
+          processedLines.push(`<p>${alertContent.join(' ')}</p>`);
+          processedLines.push('</ac:rich-text-body>');
+          processedLines.push('</ac:structured-macro>');
+          inAlert = false;
+          alertContent = [];
         }
         continue;
       }
@@ -664,6 +787,98 @@ export class MarkdownConverter {
         // CDATA内ではエスケープ不要、改行文字を\\nに変換
         processedLines.push(line ? line.replace(/\n/g, '\\n') : '');
         continue;
+      }
+
+      // 水平線の処理
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+        // 開いている要素を閉じる
+        if (inList) {
+          if (typeof inList === 'string' && inList === 'ul') {
+            for (let d = listDepth; d > 0; d--) processedLines.push('</ul>');
+          } else if (typeof inList === 'string' && inList === 'ol') {
+            for (let d = listDepth; d > 0; d--) processedLines.push('</ol>');
+          } else if (inList === true) {
+            processedLines.push('</ac:task-list>');
+          }
+          inList = false;
+          listDepth = 0;
+        }
+        if (blockquoteDepth > 0) {
+          for (let d = blockquoteDepth; d > 0; d--) processedLines.push('</blockquote>');
+          blockquoteDepth = 0;
+        }
+        processedLines.push('<hr/>');
+        continue;
+      }
+
+      // 引用ブロックとGitHub Alertsの処理
+      if (trimmed.startsWith('>')) {
+        // GitHub Alerts形式の検出: > [!NOTE], > [!WARNING], etc.
+        const alertMatch = trimmed.match(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
+        if (alertMatch && alertMatch[1]) {
+          inAlert = alertMatch[1].toUpperCase();
+          alertContent = [];
+          continue;
+        }
+
+        // アラート内のコンテンツ
+        if (inAlert) {
+          const contentMatch = trimmed.match(/^>\s*(.*)/);
+          if (contentMatch) {
+            const content = this.processInlineMarkdown(contentMatch[1] || '');
+            if (content) alertContent.push(content);
+          }
+          continue;
+        }
+
+        // 通常の引用ブロック（ネスト対応）
+        const quoteMatch = trimmed.match(/^(>+)\s*(.*)/);
+        if (quoteMatch && quoteMatch[1]) {
+          const level = quoteMatch[1].length;
+          const content = quoteMatch[2] || '';
+
+          // ネストレベルの調整
+          while (blockquoteDepth < level) {
+            processedLines.push('<blockquote>');
+            blockquoteDepth++;
+          }
+          while (blockquoteDepth > level) {
+            processedLines.push('</blockquote>');
+            blockquoteDepth--;
+          }
+
+          if (content) {
+            processedLines.push(`<p>${this.processInlineMarkdown(content)}</p>`);
+          }
+          continue;
+        }
+      } else {
+        // 引用ブロック以外の行が来たら引用を閉じる
+        if (blockquoteDepth > 0) {
+          for (let d = blockquoteDepth; d > 0; d--) {
+            processedLines.push('</blockquote>');
+          }
+          blockquoteDepth = 0;
+        }
+        // アラートを閉じる
+        if (inAlert) {
+          const alertTypeMap: Record<string, string> = {
+            'NOTE': 'info',
+            'TIP': 'tip',
+            'IMPORTANT': 'note',
+            'WARNING': 'warning',
+            'CAUTION': 'warning'
+          };
+          const panelType = alertTypeMap[inAlert] || 'info';
+          const macroId = this.generateMacroId();
+          processedLines.push(`<ac:structured-macro ac:name="${panelType}" ac:schema-version="1" ac:macro-id="${macroId}">`);
+          processedLines.push('<ac:rich-text-body>');
+          processedLines.push(`<p>${alertContent.join(' ')}</p>`);
+          processedLines.push('</ac:rich-text-body>');
+          processedLines.push('</ac:structured-macro>');
+          inAlert = false;
+          alertContent = [];
+        }
       }
 
       // 見出しの処理
@@ -757,6 +972,31 @@ export class MarkdownConverter {
         continue;
       }
 
+      // 番号付きリストの処理
+      const orderedMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+      if (orderedMatch && !inTable) {
+        const content = this.processInlineMarkdown(orderedMatch[2] || '');
+
+        if (!inList) {
+          processedLines.push('<ol>');
+          inList = 'ol';
+          listDepth = 1;
+        } else if (inList === 'ul') {
+          // 箇条書きリストから番号付きリストに切り替え
+          processedLines.push('</ul>');
+          processedLines.push('<ol>');
+          inList = 'ol';
+        } else if (inList === true) {
+          // タスクリストから番号付きリストに切り替え
+          processedLines.push('</ac:task-list>');
+          processedLines.push('<ol>');
+          inList = 'ol';
+        }
+
+        processedLines.push(`<li>${content}</li>`);
+        continue;
+      }
+
       // テーブルの処理
       if (trimmed.includes('|') && !inTable && !inList && !inCodeBlock) {
         const nextLine = i + 1 < lines.length ? lines[i + 1] : undefined;
@@ -799,9 +1039,36 @@ export class MarkdownConverter {
         for (let d = listDepth; d > 0; d--) {
           processedLines.push('</ul>');
         }
+      } else if (typeof inList === 'string' && inList === 'ol') {
+        for (let d = listDepth; d > 0; d--) {
+          processedLines.push('</ol>');
+        }
       } else if (inList === true) {
         processedLines.push('</ac:task-list>');
       }
+    }
+
+    if (blockquoteDepth > 0) {
+      for (let d = blockquoteDepth; d > 0; d--) {
+        processedLines.push('</blockquote>');
+      }
+    }
+
+    if (inAlert) {
+      const alertTypeMap: Record<string, string> = {
+        'NOTE': 'info',
+        'TIP': 'tip',
+        'IMPORTANT': 'note',
+        'WARNING': 'warning',
+        'CAUTION': 'warning'
+      };
+      const panelType = alertTypeMap[inAlert] || 'info';
+      const macroId = this.generateMacroId();
+      processedLines.push(`<ac:structured-macro ac:name="${panelType}" ac:schema-version="1" ac:macro-id="${macroId}">`);
+      processedLines.push('<ac:rich-text-body>');
+      processedLines.push(`<p>${alertContent.join(' ')}</p>`);
+      processedLines.push('</ac:rich-text-body>');
+      processedLines.push('</ac:structured-macro>');
     }
 
     if (inTable) {
@@ -815,7 +1082,7 @@ export class MarkdownConverter {
 
   private processInlineMarkdown(text: string): string {
     if (!text) return '';
-    
+
     // 先に絵文字を HTML実体参照に変換
     text = text.replace(/📋/g, '&#128203;');
     text = text.replace(/📄/g, '&#128196;');
@@ -827,40 +1094,56 @@ export class MarkdownConverter {
     text = text.replace(/⭐/g, '&#11088;');
     text = text.replace(/✅/g, '&#9989;');
     text = text.replace(/❌/g, '&#10060;');
-    text = text.replace(/�/g, '&#128640;');
-    text = text.replace(/�/g, '&#128230;');
+    text = text.replace(/🚀/g, '&#128640;');
+    text = text.replace(/📦/g, '&#128230;');
     text = text.replace(/💡/g, '&#128161;');
-    text = text.replace(/�/g, '&#128295;');
+    text = text.replace(/🔧/g, '&#128295;');
     text = text.replace(/⚠️/g, '&#9888;');
-    text = text.replace(/�/g, '&#128202;');
+    text = text.replace(/📊/g, '&#128202;');
     text = text.replace(/🤝/g, '&#129309;');
     text = text.replace(/📈/g, '&#128200;');
     text = text.replace(/🎯/g, '&#127919;');
-    
-    // インラインコードの処理（HTMLタグ生成はしない）
-    text = text.replace(/`([^`]+)`/g, '$1');
-    
-    // 太字の処理（** を除去）
-    text = text.replace(/\*\*([^*\n]+)\*\*/g, '$1');
-    
-    // 斜体の処理（* を除去）
-    text = text.replace(/\*([^*\n]+)\*/g, '$1');
-    
-    // リンクの処理（[text](url) を text に）
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
-    
-    // HTML特殊文字のエスケープは絵文字処理の後に実行
-    text = text.replace(/&(?!#\d+;)/g, '&amp;'); // 実体参照以外の&をエスケープ
+
+    // オートリンク: <URL> （HTMLエスケープ前にプレースホルダーに変換）
+    text = text.replace(/<(https?:\/\/[^\s>]+)>/g, '[[AUTOLINK:$1]]');
+    text = text.replace(/<([^\s@>]+@[^\s>]+)>/g, '[[MAILTO:$1]]');
+
+    // HTML特殊文字のエスケープ（実体参照以外）
+    text = text.replace(/&(?!#\d+;)/g, '&amp;');
     text = text.replace(/</g, '&lt;');
     text = text.replace(/>/g, '&gt;');
     text = text.replace(/"/g, '&quot;');
     text = text.replace(/'/g, '&#39;');
-    
-    return text;
-    text = text.replace(/>/g, '&gt;');
-    text = text.replace(/"/g, '&quot;');
-    text = text.replace(/'/g, '&#39;');
-    
+
+    // オートリンクを復元
+    text = text.replace(/\[\[AUTOLINK:([^\]]+)\]\]/g, '<a href="$1">$1</a>');
+    text = text.replace(/\[\[MAILTO:([^\]]+)\]\]/g, '<a href="mailto:$1">$1</a>');
+
+    // 太字斜体の組み合わせ（***text*** or ___text___）- 先に処理
+    text = text.replace(/\*\*\*([^*\n]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+    text = text.replace(/___([^_\n]+)___/g, '<strong><em>$1</em></strong>');
+
+    // 太字（**text** or __text__）
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/__([^_\n]+)__/g, '<strong>$1</strong>');
+
+    // 打消し線（~~text~~）
+    text = text.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+
+    // 斜体（*text*）
+    text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    // アンダースコア斜体（_text_）- 単語境界を考慮してsnake_caseを保護
+    text = text.replace(/(?<![a-zA-Z0-9])_([^_\n]+)_(?![a-zA-Z0-9])/g, '<em>$1</em>');
+
+    // インラインコード（`code`）
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // 画像（![alt](url)）- リンクより先に処理
+    text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<ac:image><ri:url ri:value="$2"/></ac:image>');
+
+    // リンク（[text](url)）
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
     return text;
   }
 
